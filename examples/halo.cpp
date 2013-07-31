@@ -140,7 +140,7 @@ int main(int argc, char* argv[])
 {
 	if (argc < 10)
 	{
-		std::cout << "Usage: haloTestGPU filename format min_ll max_ll l_length p_size np rL n OR haloTestOMP filename format min_ll max_ll l_length p_size np rL n" << std::endl;
+		std::cout << "Usage: haloTestGPU filename format minpn_ll max_ll l_length p_size np rL n OR haloTestOMP filename format min_ll max_ll l_length p_size np rL n" << std::endl;
 		return 1;
 	}
 

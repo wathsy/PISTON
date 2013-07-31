@@ -122,8 +122,9 @@ public:
 	thrust::device_vector<Node>  nodes; 		// leaf nodes of merge tree
   thrust::device_vector<Node>  nodesTmp1; // parent nodes of merge tree
 
-  thrust::device_vector<int>    index;	
+  thrust::device_vector<int>    inputI, inputM;							// index & mass for each particle
   thrust::device_vector<float>  inputX, inputY, inputZ;	    // positions for each particle
+  thrust::device_vector<float>  inputVX, inputVY, inputVZ;	// velocities for each particle
   thrust::device_vector<int>    haloIndex;	  			        // halo indices for each particle
   thrust::device_vector<int>    haloIndexUnique;            // unique halo indexes
   thrust::device_vector<float>  haloColorsR, haloColorsG, haloColorsB; // colors for each halo
@@ -634,7 +635,7 @@ public:
 	// return haloIndex vector
   thrust::device_vector<int> getIndex()
 	{
-  	return index;
+  	return inputI;
 	}
 
   // get unique halo ids & numOfHalos

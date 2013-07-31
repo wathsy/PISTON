@@ -48,7 +48,7 @@ public:
 	{
 		u01 = thrust::uniform_real_distribution<float>(0.0f, 1.0f);
 
-		this->n    		 = n;
+		this->n = n;
 
 		// scale amount for particles
 	  if(rL==-1) xscal = 1;
@@ -203,7 +203,7 @@ public:
 
 		// resize nodes
 		nodes.resize(numOfParticles);
-		index.resize(numOfParticles);
+		inputI.resize(numOfParticles);
 
 		// rewind file to beginning for particle reads
 		myfile->seekg(0L, std::ios::beg);
@@ -213,6 +213,7 @@ public:
 		int   iBlock[nint];
 
 		float minX, minY, minZ, maxX, maxY, maxZ;
+		thrust::host_vector<Node> nodes_h(numOfParticles);
 		for (int i=0; i<numOfParticles; i++)
 		{
 			// Set file pointer to the requested particle
@@ -234,9 +235,9 @@ public:
 			n.pos = Point(fBlock[0], fBlock[2], fBlock[4]);
 			n.vel = Point(fBlock[1], fBlock[3], fBlock[5]);
 			n.mass = fBlock[6];
-			nodes[i] = n;
+			nodes_h[i] = n;
 
-			index[i] = iBlock[0];
+			inputI[i] = iBlock[0];
 
 			if(i==0)
 			{	
@@ -251,6 +252,8 @@ public:
 				minZ = std::min(minZ, n.pos.z);	maxZ = std::max(maxZ, n.pos.z);
 			}
 		}
+
+		thrust::copy(nodes_h.begin(), nodes_h.end(), nodes.begin());
 
 		// get bounds of the space
 		lBoundS = Point(minX, minY, minZ);
@@ -337,9 +340,6 @@ public:
 										 thrust::raw_pointer_cast(&*haloVY.begin()),
 										 thrust::raw_pointer_cast(&*haloVZ.begin()),
 										 linkLength, particleSize));
-/*
-		std::cout << "haloCount		"; thrust::copy(haloCount.begin(), haloCount.begin()+numOfHalos, std::ostream_iterator<float>(std::cout, " "));   std::cout << std::endl << std::endl;
-*/
 	}
 
 	// for each halo, get its stats
@@ -371,9 +371,9 @@ public:
       Node *n = (&nodes[particleId[i]])->parentSuper;
 
 			haloCount[i] = n->count;
-			haloX[i] = (float)(n->pos.x/n->count);	haloVX[i] = (float)(n->pos.x/n->count);
-			haloY[i] = (float)(n->pos.y/n->count);	haloVY[i] = (float)(n->pos.y/n->count);
-			haloZ[i] = (float)(n->pos.z/n->count);	haloVZ[i] = (float)(n->pos.z/n->count);		
+			haloX[i] = (float)(n->pos.x/n->count);	haloVX[i] = (float)(n->vel.x/n->count);
+			haloY[i] = (float)(n->pos.y/n->count);	haloVY[i] = (float)(n->vel.y/n->count);
+			haloZ[i] = (float)(n->pos.z/n->count);	haloVZ[i] = (float)(n->vel.z/n->count);		
 		}
 	};
 
