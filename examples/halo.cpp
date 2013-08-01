@@ -90,7 +90,7 @@ void compareResultsTxt(string filename, int numOfParticles, thrust::device_vecto
 }
 
 // given one vector & a ascii file with results, compare their elements
-void compareResultsAscii(string filename, int numOfParticles, thrust::device_vector<int> d, thrust::device_vector<int> index, string txt)
+void compareResultsAscii(string filename, int numOfParticles, thrust::device_vector<int> d, string txt)
 {
 	std::string line;
 	thrust::device_vector<int> ids(numOfParticles);
@@ -131,7 +131,7 @@ void compareResultsAscii(string filename, int numOfParticles, thrust::device_vec
 		if(d[i]!=items[i]) count++;
 	}
 
-	std::string output = (count==0) ? txt+" - Result is the same" : txt+" - Result is NOT the same";
+	std::string output = (count==0) ? txt +" - Result is the same" : txt +" - Result is NOT the same";
 	std::cout << output << std::endl << std::endl;
 	if(count != 0) std::cout << "count " << count << std::endl << std::endl;
 }
@@ -195,13 +195,12 @@ int main(int argc, char* argv[])
   halo = new halo_merge(min_linkLength, max_linkLength, filename, format, n, np, rL);
   (*halo)(linkLength, particleSize);
   thrust::device_vector<int> d = halo->getHalos();
-	thrust::device_vector<int> index = halo->getHalos();
 
   //---------------------------- compare results
 
 		std::cout << "Comparing results" << std::endl;
 
-//  compareResultsAscii("/home/wathsy/Cosmo/PISTONSampleData/Small/output/m000.499.allparticles.ascii", halo->numOfParticles, d, index, "TestCase vs Mergetree");
+//  compareResultsAscii("/home/wathsy/Cosmo/PISTONSampleData/Small/output/m000.499.allparticles.ascii", halo->numOfParticles, d, "TestCase vs Mergetree");
 
   	compareResultsTxt((string)filename+"_Vtk.txt", halo->numOfParticles, d, "Vtk vs Mergetree");
 //	compareResults(a, c, halo->numOfParticles, "Naive vs Kdtree");

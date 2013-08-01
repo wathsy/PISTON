@@ -44,29 +44,8 @@ public:
 	thrust::device_vector<int>   tmpIntArray, tmpIntArray1;	// temperary arrays used 
 	thrust::device_vector<int>   tmpNxt, tmpFree;  // stores details of free items in merge tree
 
-	halo_merge(float min_linkLength, float max_linkLength, std::string filename="", std::string format=".cosmo", int n = 1, int np=1, float rL=-1) : halo(0,0) //: halo(filename, format, n, np, rL)
+	halo_merge(float min_linkLength, float max_linkLength, std::string filename="", std::string format=".cosmo", int n = 1, int np=1, float rL=-1) : halo(filename, format, n, np, rL)
 	{
-		u01 = thrust::uniform_real_distribution<float>(0.0f, 1.0f);
-
-		this->n = n;
-
-		// scale amount for particles
-	  if(rL==-1) xscal = 1;
-	  else       xscal = rL / (1.0*np);
-
-    if(!readHaloFile(filename, format))
-    {	
-//			generateUniformData();		// generate uniformly spaced points		
-			generateNonUniformData(); // generate nearby points to real data
-
-			std::cout << "Test data loaded \n";
-    }
-
-    haloIndex.resize(numOfParticles);
-    thrust::copy(CountingIterator(0), CountingIterator(0)+numOfParticles, haloIndex.begin());
-
-    std::cout << "numOfParticles : " << numOfParticles << " \n";
-
 		if(numOfParticles!=0)
 		{
 			struct timeval begin, mid1, mid2, mid3, mid4, end, diff1, diff2, diff3;
@@ -171,95 +150,6 @@ public:
     std::cout << "Min_ll  : " << min_ll/xscal  << std::endl;
     std::cout << "Max_ll  : " << max_ll/xscal << std::endl << std::endl;
 		std::cout << "-----------------------------" << std::endl << std::endl;
-	}
-
-  // read input file - currently can read a .cosmo file or a .csv file
-  // .csv file - when you have a big data file and you want a piece of it, load it in VTK and slice it and save it as .csv file, within this function it will rewrite the date to .cosmo format
-  bool readHaloFile(std::string filename, std::string format)
-  {
-    // check filename
-    if(filename == "") { std::cout << "no input file specified \n"; return false; }
-		if(format == "hcosmo") return readHCosmoFile(filename, format);
-		if(format == "cosmo")  return readCosmoFile(filename, format);
-    if(format == "csv")    return readCsvFile(filename, format);   
-
-    return false;
-  }
-
-	bool readCosmoFile(std::string filename, std::string format)
-	{
-		// open .cosmo file
-		std::ifstream *myfile = new std::ifstream((filename+"."+format).c_str(), std::ios::in);
-		if (!myfile->is_open()) { std::cout << "File: " << filename << "." << format << " cannot be opened \n"; return false; }
-
-		int nfloat = 7, nint = 1;
-		
-		// compute the number of particles
-		myfile->seekg(0L, std::ios::end);
-		numOfParticles = myfile->tellg() / 32; // get particle size in file
-
-		// get the fraction wanted
-		numOfParticles = numOfParticles / n; 
-
-		// resize nodes
-		nodes.resize(numOfParticles);
-		inputI.resize(numOfParticles);
-
-		// rewind file to beginning for particle reads
-		myfile->seekg(0L, std::ios::beg);
-
-		// declare temporary read buffers
-		float fBlock[nfloat];
-		int   iBlock[nint];
-
-		float minX, minY, minZ, maxX, maxY, maxZ;
-		thrust::host_vector<Node> nodes_h(numOfParticles);
-		for (int i=0; i<numOfParticles; i++)
-		{
-			// Set file pointer to the requested particle
-			myfile->read(reinterpret_cast<char*>(fBlock), nfloat * sizeof(float));
-
-			if (myfile->gcount() != (int)(nfloat * sizeof(float))) {
-				std::cout << "Premature end-of-file" << std::endl;
-				return false;
-			}
-
-			myfile->read(reinterpret_cast<char*>(iBlock), nint * sizeof(int));
-			if (myfile->gcount() != (int)(nint * sizeof(int))) {
-				std::cout << "Premature end-of-file" << std::endl;
-				return false;
-			}
-
-			Node n = Node();
-			n.nodeId = i;	n.haloId = i;	n.count  = 1;
-			n.pos = Point(fBlock[0], fBlock[2], fBlock[4]);
-			n.vel = Point(fBlock[1], fBlock[3], fBlock[5]);
-			n.mass = fBlock[6];
-			nodes_h[i] = n;
-
-			inputI[i] = iBlock[0];
-
-			if(i==0)
-			{	
-				minX = n.pos.x; maxX = n.pos.x;
-				minY = n.pos.y; maxY = n.pos.y;
-				minZ = n.pos.z; maxZ = n.pos.z;	
-			}
-			else
-			{
-				minX = std::min(minX, n.pos.x);	maxX = std::max(maxX, n.pos.x);
-				minY = std::min(minY, n.pos.y);	maxY = std::max(maxY, n.pos.y);
-				minZ = std::min(minZ, n.pos.z);	maxZ = std::max(maxZ, n.pos.z);
-			}
-		}
-
-		thrust::copy(nodes_h.begin(), nodes_h.end(), nodes.begin());
-
-		// get bounds of the space
-		lBoundS = Point(minX, minY, minZ);
-		uBoundS = Point(maxX, maxY, maxZ);
-
-		return true;
 	}
 
 	// find halo ids 
