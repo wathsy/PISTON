@@ -57,7 +57,7 @@ public:
 			max_ll  = max_linkLength*xscal; // get max_linkinglength
 			cubeLen = min_ll / std::sqrt(3); // min_ll*min_ll = 3*cubeLen*cubeLen
 
-			if(cubeLen <= 0) { std::cout << "--ERROR : plase specify a valid cubeLen... current cubeLen is " << cubeLen << std::endl; return; }
+			if(cubeLen <= 0) { std::cout << "--ERROR : please specify a valid cubeLen... current cubeLen is " << cubeLen/xscal << std::endl; return; }
 
 			initDetails();
 
@@ -69,7 +69,7 @@ public:
 			divideIntoCubes();
 			gettimeofday(&mid1, 0);
 
-			std::cout << "-- Cubes  " << numOfCubes << " : (" << cubesInX << "*" << cubesInY << "*" << cubesInZ << ") ... cubeLen " << cubeLen << std::endl;
+			std::cout << "-- Cubes  " << numOfCubes << " : (" << cubesInX << "*" << cubesInY << "*" << cubesInZ << ") ... cubeLen " << cubeLen/xscal << std::endl;
 
 			#ifdef TEST
 				outputCubeDetails("init cube details"); // output cube details
