@@ -19,7 +19,7 @@ using namespace std;
 
 using namespace piston;
 
-// given three vectors, compare the i th  element of the first two vectors& write 0 or 1 in the third vector
+// given three vectors, compare the i the  element of the first two vectors& write 0 or 1 in the third vector
 struct compare
 {
 	int *a, *b, *c;
@@ -140,7 +140,10 @@ int main(int argc, char* argv[])
 {
 	if (argc < 10)
 	{
-		std::cout << "Usage: haloTestGPU filename format minpn_ll max_ll l_length p_size np rL n OR haloTestOMP filename format min_ll max_ll l_length p_size np rL n" << std::endl;
+		std::cout << "Usage:" << std::endl;
+		std::cout << "haloGPU filename format min_ll max_ll l_length p_size np rL n" << std::endl;
+		std::cout << "OR" << std::endl;
+		std::cout << "haloOMP filename format min_ll max_ll l_length p_size np rL n \n" << std::endl;
 		return 1;
 	}
 
@@ -198,11 +201,12 @@ int main(int argc, char* argv[])
 
   //---------------------------- compare results
 
-		std::cout << "Comparing results" << std::endl;
+//		std::cout << "Comparing results" << std::endl;
 
 //  compareResultsAscii("/home/wathsy/Cosmo/PISTONSampleData/Small/output/m000.499.allparticles.ascii", halo->numOfParticles, d, "TestCase vs Mergetree");
 
-  	compareResultsTxt((string)filename+"_Vtk.txt", halo->numOfParticles, d, "Vtk vs Mergetree");
+//  compareResultsTxt((string)filename+"_Vtk.txt", halo->numOfParticles, d, "Vtk vs Mergetree");
+
 //	compareResults(a, c, halo->numOfParticles, "Naive vs Kdtree");
 //	compareResults(b, c, halo->numOfParticles, "Vtk (thrust version) vs Kdtree");
 //	compareResults(c, d, halo->numOfParticles, "Kdtree vs Mergetree");

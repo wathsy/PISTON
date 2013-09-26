@@ -211,6 +211,8 @@ public:
 		std::ifstream *myfile = new std::ifstream((filename+"."+format).c_str(), std::ios::in);
 		if (!myfile->is_open()) { std::cout << "File: " << filename << "." << format << " cannot be opened \n"; return false; }
 
+		std::cout << filename << std::endl;
+
 		int nfloat = 7, nint = 1;
 
 		// declare temporary read buffers
@@ -346,7 +348,8 @@ public:
 				return false;
 			}
 
-			iBlockTmp[0] = i;
+			for (int j=0; j<nint; j++)
+			  iBlockTmp[j] = i; //(int)iBlockTmp[j];
 
 			// write to file
 		  outStream->write(reinterpret_cast<const char*>(fBlock), nfloat * sizeof(float));
@@ -478,7 +481,7 @@ public:
 		u = thrust::uniform_real_distribution<float>(-0.5f, 0.5f);
 
 		// set the input file information
-		readHaloFile("/home/wathsy/Cosmo/PISTONSampleData/sub-24474", "cosmo");
+		readHaloFile("/home/wathsy/Desktop/HaloFinder/data/sub-24474", "cosmo");
 
 		int numPoints = 1;
 
@@ -519,7 +522,7 @@ public:
 		}
 		outStream->close();
 
-		numOfParticles *= num; // set the new numOfParticles
+		numOfParticles *= numPoints; // set the new numOfParticles
 
 		std::cout << "Non UniformData generated \n";
 

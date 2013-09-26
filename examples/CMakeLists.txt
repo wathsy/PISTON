@@ -40,14 +40,11 @@ if (USE_CUDA)
   cuda_add_executable(thresholdGPU glwindow.cu ${ex_SOURCES} ${ex_HEADERS_MOC} ${ex_FORMS_HEADERS} OPTIONS "-DTHRESHOLD" ${GPU_FLAGS})
   target_link_libraries(thresholdGPU GLEW pthread ${OPENGL_LIBRARIES} ${GLUT_LIBRARIES} ${QT_LIBRARIES})
 
-  cuda_add_executable(haloGPU halorender.cu ${ex_SOURCES} ${ex_HEADERS_MOC} ${ex_FORMS_HEADERS} OPTIONS "-DHALO" ${GPU_FLAGS} "-DDATA_DIRECTORY=${DATA_DIR}")
-  target_link_libraries(haloGPU GLEW pthread ${OPENGL_LIBRARIES} ${GLUT_LIBRARIES} ${QT_LIBRARIES})
+  cuda_add_executable(haloGuiGPU glwindowHalo.cu ${halo_SOURCES} ${halo_HEADERS_MOC} ${halo_FORMS_HEADERS} OPTIONS "-DHALO" ${GPU_FLAGS} "-DDATA_DIRECTORY=${DATA_DIR}")
+  target_link_libraries(haloGuiGPU GLEW pthread ${OPENGL_LIBRARIES} ${GLUT_LIBRARIES} ${QT_LIBRARIES})
 
-  cuda_add_executable(haloMergeTreeGPU glwindowHalo.cu ${halo_SOURCES} ${halo_HEADERS_MOC} ${halo_FORMS_HEADERS} OPTIONS "-DHALO" ${GPU_FLAGS} "-DDATA_DIRECTORY=${DATA_DIR}")
-  target_link_libraries(haloMergeTreeGPU GLEW pthread ${OPENGL_LIBRARIES} ${GLUT_LIBRARIES} ${QT_LIBRARIES})
-
-  cuda_add_executable(haloTestGPU halo.cu OPTIONS "-DDATA_DIRECTORY=${DATA_DIR}")
-  target_link_libraries(haloTestGPU pthread)
+  cuda_add_executable(haloGPU halo.cu OPTIONS "-DDATA_DIRECTORY=${DATA_DIR}")
+  target_link_libraries(haloGPU pthread)
 
   cuda_add_executable(mandelbrotGPU mandelbrot.cu)
   target_link_libraries(mandelbrotGPU pthread)
@@ -79,17 +76,13 @@ add_executable(image3d_to_tetOMP image3d_to_tet.cpp)
 set_target_properties(image3d_to_tetOMP PROPERTIES COMPILE_FLAGS "-fopenmp -DTHRESHOLD -DTHRUST_DEVICE_BACKEND=THRUST_DEVICE_BACKEND_OMP")
 target_link_libraries(image3d_to_tetOMP gomp pthread)
 
-add_executable(haloOMP halorender.cpp ${ex_SOURCES} ${ex_HEADERS_MOC} ${ex_FORMS_HEADERS})
-set_target_properties(haloOMP PROPERTIES COMPILE_FLAGS "-fopenmp -DHALO -DTHRUST_DEVICE_BACKEND=THRUST_DEVICE_BACKEND_OMP -DDATA_DIRECTORY=${DATA_DIR}")
-target_link_libraries(haloOMP GLEW pthread gomp ${OPENGL_LIBRARIES} ${GLUT_LIBRARIES} ${QT_LIBRARIES})
+add_executable(haloGuiOMP glwindowHalo.cpp ${halo_SOURCES} ${halo_HEADERS_MOC} ${halo_FORMS_HEADERS})
+set_target_properties(haloGuiOMP PROPERTIES COMPILE_FLAGS "-fopenmp -DHALO -DTHRUST_DEVICE_BACKEND=THRUST_DEVICE_BACKEND_OMP -DDATA_DIRECTORY=${DATA_DIR}")
+target_link_libraries(haloGuiOMP GLEW pthread gomp ${OPENGL_LIBRARIES} ${GLUT_LIBRARIES} ${QT_LIBRARIES})
 
-add_executable(haloMergeTreeOMP glwindowHalo.cpp ${halo_SOURCES} ${halo_HEADERS_MOC} ${halo_FORMS_HEADERS})
-set_target_properties(haloMergeTreeOMP PROPERTIES COMPILE_FLAGS "-fopenmp -DHALO -DTHRUST_DEVICE_BACKEND=THRUST_DEVICE_BACKEND_OMP -DDATA_DIRECTORY=${DATA_DIR}")
-target_link_libraries(haloMergeTreeOMP GLEW pthread gomp ${OPENGL_LIBRARIES} ${GLUT_LIBRARIES} ${QT_LIBRARIES})
-
-add_executable(haloTestOMP halo.cpp)
-set_target_properties(haloTestOMP PROPERTIES COMPILE_FLAGS "-g -fopenmp -DTHRUST_DEVICE_BACKEND=THRUST_DEVICE_BACKEND_OMP -DDATA_DIRECTORY=${DATA_DIR}")
-target_link_libraries(haloTestOMP pthread gomp)
+add_executable(haloOMP halo.cpp)
+set_target_properties(haloOMP PROPERTIES COMPILE_FLAGS "-g -fopenmp -DTHRUST_DEVICE_BACKEND=THRUST_DEVICE_BACKEND_OMP -DDATA_DIRECTORY=${DATA_DIR}")
+target_link_libraries(haloOMP pthread gomp)
 
 
 

@@ -32,7 +32,7 @@ public:
 	{
 		clear();
 
-		linkLength    = linkLength;
+		linkLength   = linkLength*xscal;
 		particleSize  = particleSize;
 
 		// no valid particles, return
