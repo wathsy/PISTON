@@ -25,7 +25,6 @@ public:
         KDtreeNode() : i(-1), ind(-1), parent(-1), leftC(-1), rightC(-1), startInd(-1), size(-1), splitValue(-1), isRight(false) {}
     };
 
-
     struct Level
     {
         int startInd;
@@ -35,7 +34,6 @@ public:
         __host__ __device__
         Level() {}
     };
-
 
     thrust::device_vector<float> uBoundsX, uBoundsY, uBoundsZ;
     thrust::device_vector<float> lBoundsX, lBoundsY, lBoundsZ;
@@ -66,41 +64,41 @@ public:
 
     halo_kd(std::string filename="", std::string format=".cosmo", int n = 1, int np=1, float rL=-1) : halo(filename, format, n, np, rL)
     {
-        if(numOfParticles!=0)
-        {			
-			levels    = (int) std::ceil(log2((double)(numOfParticles)))+1;
-			haloIndex.resize(numOfParticles);
-			thrust::sequence(haloIndex.begin(), haloIndex.end());
+      if(numOfParticles!=0)
+      {
+        levels    = (int) std::ceil(log2((double)(numOfParticles)))+1;
+        haloIndex.resize(numOfParticles);
+        thrust::sequence(haloIndex.begin(), haloIndex.end());
 
-			haloIndexOriginal.resize(numOfParticles);
-			thrust::sequence(haloIndexOriginal.begin(), haloIndexOriginal.end());
+        haloIndexOriginal.resize(numOfParticles);
+        thrust::sequence(haloIndexOriginal.begin(), haloIndexOriginal.end());
 
-			struct timeval begin, mid1, mid2, end, diff1, diff2;
-			gettimeofday(&begin, 0);
-			getBalancedKdTree();
-			gettimeofday(&mid1, 0);
+        struct timeval begin, mid1, mid2, end, diff1, diff2;
+        gettimeofday(&begin, 0);
+        getBalancedKdTree();
+        gettimeofday(&mid1, 0);
 
-			// set the size for computing bounds
-			uBoundsX.resize(numOfParticles*2);
-			uBoundsY.resize(numOfParticles*2);
-			uBoundsZ.resize(numOfParticles*2);
-			lBoundsX.resize(numOfParticles*2);
-			lBoundsY.resize(numOfParticles*2);
-			lBoundsZ.resize(numOfParticles*2);
+        // set the size for computing bounds
+        uBoundsX.resize(numOfParticles*2);
+        uBoundsY.resize(numOfParticles*2);
+        uBoundsZ.resize(numOfParticles*2);
+        lBoundsX.resize(numOfParticles*2);
+        lBoundsY.resize(numOfParticles*2);
+        lBoundsZ.resize(numOfParticles*2);
 
-			gettimeofday(&mid2, 0);
-			computeBounds();
-			gettimeofday(&end, 0);
+        gettimeofday(&mid2, 0);
+        computeBounds();
+        gettimeofday(&end, 0);
 
-			timersub(&mid1, &begin, &diff1);
-			float seconds1 = diff1.tv_sec + 1.0E-6*diff1.tv_usec;
-			std::cout << "Time elapsed: " << seconds1 << " s for KD tree construction"<< std::endl << std::flush;
-			timersub(&end, &mid2, &diff2);
-			float seconds2 = diff2.tv_sec + 1.0E-6*diff2.tv_usec;
-			std::cout << "Time elapsed: " << seconds2 << " s for computing bounds"<< std::endl << std::flush;
+        timersub(&mid1, &begin, &diff1);
+        float seconds1 = diff1.tv_sec + 1.0E-6*diff1.tv_usec;
+        std::cout << "Time elapsed: " << seconds1 << " s for KD tree construction"<< std::endl << std::flush;
+        timersub(&end, &mid2, &diff2);
+        float seconds2 = diff2.tv_sec + 1.0E-6*diff2.tv_usec;
+        std::cout << "Time elapsed: " << seconds2 << " s for computing bounds"<< std::endl << std::flush;
 
-			totalTime = seconds1 + seconds2;
-        }
+        totalTime = seconds1 + seconds2;
+      }
     }
 
 
@@ -178,62 +176,62 @@ public:
     // build the b-Kdtree & split the data
     void getBalancedKdTree()
     {
-        // set the size for balanced kd tree
-        kd_tree.resize(numOfParticles*2);
+      // set the size for balanced kd tree
+      kd_tree.resize(numOfParticles*2);
 
-        //set the size for the level details array
-        levelInfo.resize(levels); 
+      //set the size for the level details array
+      levelInfo.resize(levels);
 
-        thrust::device_vector<KDtreeNode> lChildren;
-        thrust::device_vector<KDtreeNode> rChildren;
+      thrust::device_vector<KDtreeNode> lChildren;
+      thrust::device_vector<KDtreeNode> rChildren;
 
-        int curIndex = 0, count = 1;
+      int curIndex = 0, count = 1;
 
-        KDtreeNode current = kd_tree[count-1];
-        current.i    	   =  0;
-        current.ind 	   = -1;
-        current.parent	   = -1;
-        current.startInd   =  0;
-        current.size       =  numOfParticles;
-        kd_tree[count-1]   = current;
-        for(int l=0; l<levels; l++)
-        {			
-			if(curIndex>=count) return;
+      KDtreeNode current = kd_tree[count-1];
+      current.i    	   =  0;
+      current.ind 	   = -1;
+      current.parent	   = -1;
+      current.startInd   =  0;
+      current.size       =  numOfParticles;
+      kd_tree[count-1]   = current;
+      for(int l=0; l<levels; l++)
+      {
+        if(curIndex>=count) return;
 
-			int size = count-curIndex;
+        int size = count-curIndex;
 
-			Level currentL     = levelInfo[l];
-			currentL.startInd  = curIndex;
-			currentL.size      = size;
-			currentL.splitAxis = l%3;
-			levelInfo[l]       = currentL;
+        Level currentL     = levelInfo[l];
+        currentL.startInd  = curIndex;
+        currentL.size      = size;
+        currentL.splitAxis = l%3;
+        levelInfo[l]       = currentL;
 
-			// get left & right children
-			lChildren.resize(size); 
-			rChildren.resize(size); 
-			thrust::transform(CountingIterator(curIndex), CountingIterator(curIndex)+size,
-					thrust::make_zip_iterator(thrust::make_tuple(lChildren.begin(), rChildren.begin())),
-					getChildren(thrust::raw_pointer_cast(&*kd_tree.begin()), l));
+        // get left & right children
+        lChildren.resize(size);
+        rChildren.resize(size);
+        thrust::transform(CountingIterator(curIndex), CountingIterator(curIndex)+size,
+            thrust::make_zip_iterator(thrust::make_tuple(lChildren.begin(), rChildren.begin())),
+            getChildren(thrust::raw_pointer_cast(&*kd_tree.begin()), l));
 
-			// remove invalid children in lChildren & rChildren
-			thrust::device_vector<KDtreeNode>::iterator new_end1 = thrust::remove_if(lChildren.begin(), lChildren.end(), notValidKDtreeNode());
-			thrust::device_vector<KDtreeNode>::iterator new_end2 = thrust::remove_if(rChildren.begin(), rChildren.end(), notValidKDtreeNode());
+        // remove invalid children in lChildren & rChildren
+        thrust::device_vector<KDtreeNode>::iterator new_end1 = thrust::remove_if(lChildren.begin(), lChildren.end(), notValidKDtreeNode());
+        thrust::device_vector<KDtreeNode>::iterator new_end2 = thrust::remove_if(rChildren.begin(), rChildren.end(), notValidKDtreeNode());
 
-			// get number of valid left & right children
-			int numValidlChildren = new_end1-lChildren.begin();
-			int numValidrChildren = new_end2-rChildren.begin();
+        // get number of valid left & right children
+        int numValidlChildren = new_end1-lChildren.begin();
+        int numValidrChildren = new_end2-rChildren.begin();
 
-			// set parent child details, & insert to tree
-			thrust::for_each(CountingIterator(0), CountingIterator(0)+numValidlChildren,
-				   nodeInsert(thrust::raw_pointer_cast(&*kd_tree.begin()), count, thrust::raw_pointer_cast(&*lChildren.begin())) );
-			thrust::for_each(CountingIterator(0), CountingIterator(0)+numValidrChildren,
-				   nodeInsert(thrust::raw_pointer_cast(&*kd_tree.begin()), count+numValidlChildren, thrust::raw_pointer_cast(&*rChildren.begin())) );
+        // set parent child details, & insert to tree
+        thrust::for_each(CountingIterator(0), CountingIterator(0)+numValidlChildren,
+             nodeInsert(thrust::raw_pointer_cast(&*kd_tree.begin()), count, thrust::raw_pointer_cast(&*lChildren.begin())) );
+        thrust::for_each(CountingIterator(0), CountingIterator(0)+numValidrChildren,
+             nodeInsert(thrust::raw_pointer_cast(&*kd_tree.begin()), count+numValidlChildren, thrust::raw_pointer_cast(&*rChildren.begin())) );
 
-			count   += (numValidlChildren + numValidrChildren);
-			curIndex = curIndex+size;
-        }
+        count   += (numValidlChildren + numValidrChildren);
+        curIndex = curIndex+size;
+      }
 		
-	getRanksForAllSegments(thrust::raw_pointer_cast(&*kd_tree.begin()));
+      getRanksForAllSegments(thrust::raw_pointer_cast(&*kd_tree.begin()));
 
         /*  std::cout << "Levels: " << std::endl << std::flush;
         for (unsigned int i=0; i<levelInfo.size(); i++)
@@ -359,9 +357,10 @@ public:
         thrust::copy(inputReorder.begin(), inputReorder.end(), inputZ.begin());
 
         thrust::device_vector<int> haloIdReorder;  haloIdReorder.resize(haloIndexOriginal.size());
-        thrust::copy(thrust::make_permutation_iterator(haloIndexOriginal.begin(), pointId), thrust::make_permutation_iterator(haloIndexOriginal.end(), pointId+haloIndexOriginal.size()), haloIdReorder.begin());
-		thrust::copy(haloIdReorder.begin(), haloIdReorder.end(), haloIndexOriginal.begin());
-		thrust::copy(haloIdReorder.begin(), haloIdReorder.end(), haloIndex.begin());
+        thrust::copy(thrust::make_permutation_iterator(haloIndexOriginal.begin(), pointId),
+                     thrust::make_permutation_iterator(haloIndexOriginal.end(), pointId+haloIndexOriginal.size()), haloIdReorder.begin());
+        thrust::copy(haloIdReorder.begin(), haloIdReorder.end(), haloIndexOriginal.begin());
+        thrust::copy(haloIdReorder.begin(), haloIdReorder.end(), haloIndex.begin());
 
         delete ktree;
     }

@@ -91,15 +91,15 @@ public:
 
 			std::cout << "-- globalStep done" << std::endl;
 
-			checkValidMergeTree(); 
-			getSizeOfMergeTree(); 
+			checkValidMergeTree();
+			getSizeOfMergeTree();
 			clearSuperParents();
 
 			particleId.clear();	  particleSizeOfCubes.clear();  particleStartOfCubes.clear();
 			edges.clear();			  edgeSizeOfCubes.clear();		  edgeStartOfCubes.clear();
 			cubeId.clear();			  cubeMapping.clear();				  cubeMappingInv.clear();
 			tmpIntArray.clear();  tmpNxt.clear();							  tmpFree.clear();
-			sizeOfChunks.clear(); startOfChunks.clear();			
+			sizeOfChunks.clear(); startOfChunks.clear();
 
 			std::cout << std::endl;
 			timersub(&mid1, &begin, &diff1);
@@ -187,7 +187,7 @@ public:
 
 			nodes[i].parentSuper = n;
 
-			haloIndex[i] = (n->count >= particleSize) ? n->haloId : -1;
+			haloIndex[i] = (n->count >= particleSize) ? n->haloIdOri : -1;
 		}
 	};
 
@@ -765,7 +765,7 @@ public:
 			float x=0, y=0, z=0;
 			float vx=0, vy=0, vz=0;
 
-			int minValue = -1;
+			int minValue = -1, minValueOri = -1;
 			for(int j=particleStartOfCubes[i]; j<particleStartOfCubes[i]+particleSizeOfCubes[i]; j++)
 			{
 				Node *tmp = &nodes[particleId[j]];
@@ -776,6 +776,7 @@ public:
 				else {	 n->childE->sibling = tmp;	n->childE = tmp; }
 
 				minValue = (minValue==-1) ? tmp->haloId : (minValue<tmp->haloId ? minValue : tmp->haloId);
+				minValueOri = (minValueOri==-1) ? tmp->haloIdOri : (minValueOri<tmp->haloIdOri ? minValueOri : tmp->haloIdOri);
 
 			  x += tmp->pos.x;	vx += tmp->vel.x;
 				y += tmp->pos.y;	vy += tmp->vel.y;
@@ -784,6 +785,7 @@ public:
 
 			n->value  = min_ll;
       n->haloId = minValue;
+      n->haloIdOri = minValueOri;
       n->count += particleSizeOfCubes[i];
 			n->pos = Point(x,y,z);
 			n->vel = Point(vx,vy,vz);
@@ -1365,6 +1367,7 @@ public:
 					n->pos = Point(src->pos.x+des->pos.x, src->pos.y+des->pos.y, src->pos.z+des->pos.z);
 					n->vel = Point(src->vel.x+des->vel.x, src->vel.y+des->vel.y, src->vel.z+des->vel.z);
 					n->haloId = (src->haloId < des->haloId) ? src->haloId : des->haloId;
+					n->haloIdOri = (src->haloIdOri < des->haloIdOri) ? src->haloIdOri : des->haloIdOri;
 
 					if(freeDes && des->nodeId>=numOfParticles)
 					{
@@ -1375,6 +1378,7 @@ public:
 
 						des->nodeId = des->nodeId;
 						des->haloId = -1;
+						des->haloIdOri = -1;
 						des->value  = 0.0f;
 						des->count  = 0;
 						des->pos = Point(0,0,0);
@@ -1398,6 +1402,7 @@ public:
 							else  srcTmp->childS = n;
 							srcTmp->childE = n;
 							srcTmp->haloId = (srcTmp->haloId < n->haloId) ? srcTmp->haloId : n->haloId;
+							srcTmp->haloIdOri = (srcTmp->haloIdOri < n->haloIdOri) ? srcTmp->haloIdOri : n->haloIdOri;
 							srcCount = srcTmp->count;
 							srcTmp->count += desCount;
 							srcX = srcTmp->pos.x;		srcVX = srcTmp->vel.x;
@@ -1437,6 +1442,7 @@ public:
 							else  desTmp->childS = n;
 							desTmp->childE = n;
 							desTmp->haloId = (desTmp->haloId < n->haloId) ? desTmp->haloId : n->haloId;
+							desTmp->haloIdOri = (desTmp->haloIdOri < n->haloIdOri) ? desTmp->haloIdOri : n->haloIdOri;
 							desCount = desTmp->count;
 							desTmp->count += srcCount;
 							desX = desTmp->pos.x;		desVX = desTmp->vel.x;
@@ -1479,6 +1485,7 @@ public:
 								else  srcTmp->childS = desTmp->childS;
 								srcTmp->childE = desTmp->childE;
 								srcTmp->haloId = (srcTmp->haloId < desTmp->haloId) ? srcTmp->haloId : desTmp->haloId;
+								srcTmp->haloIdOri = (srcTmp->haloIdOri < desTmp->haloIdOri) ? srcTmp->haloIdOri : desTmp->haloIdOri;
 								srcTmp->count += desTmp->count;
 								srcTmp->pos = Point(srcTmp->pos.x+desTmp->pos.x, srcTmp->pos.y+desTmp->pos.y, srcTmp->pos.z+desTmp->pos.z);
 								srcTmp->vel = Point(srcTmp->vel.x+desTmp->vel.x, srcTmp->vel.y+desTmp->vel.y, srcTmp->vel.z+desTmp->vel.z);
@@ -1515,6 +1522,7 @@ public:
 
 									srcTmp->nodeId = srcTmp->nodeId;
 									srcTmp->haloId = -1;
+									srcTmp->haloIdOri = -1;
 									srcTmp->value  = 0.0f;
 									srcTmp->count  = 0;
 									srcTmp->pos = Point(0,0,0);
@@ -1535,6 +1543,7 @@ public:
 								else  srcTmp->childS = n;
 								srcTmp->childE = n;
 								srcTmp->haloId = (srcTmp->haloId < n->haloId) ? srcTmp->haloId : n->haloId;
+								srcTmp->haloIdOri = (srcTmp->haloIdOri < n->haloIdOri) ? srcTmp->haloIdOri : n->haloIdOri;
 							}
 							else	n->parent =NULL;
 

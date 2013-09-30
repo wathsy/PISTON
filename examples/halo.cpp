@@ -173,6 +173,13 @@ int main(int argc, char* argv[])
   std::cout << filename << std::endl;
   std::cout << std::endl;
 
+  {
+    //read .hcosmo file
+
+    //read allparticles
+
+  }
+
   //---------------------------- run different versions
 
 //  std::cout << "Naive result" << std::endl;
@@ -187,11 +194,11 @@ int main(int argc, char* argv[])
 //  (*halo)(linkLength, particleSize);
 //  thrust::device_vector<int> b = halo->getHalos();
 //
-//  std::cout << "Kdtree based result" << std::endl;
-//
-//  halo = new halo_kd(filename, format, n, np, rL);
-//  (*halo)(linkLength, particleSize);
-//  thrust::device_vector<int> c = halo->getHalos();
+  std::cout << "Kdtree based result" << std::endl;
+
+  halo = new halo_kd(filename, format, n, np, rL);
+  (*halo)(linkLength, particleSize);
+  thrust::device_vector<int> c = halo->getHalos();
 
   std::cout << "Merge tree based result" << std::endl;
 
@@ -201,7 +208,7 @@ int main(int argc, char* argv[])
 
   //---------------------------- compare results
 
-//		std::cout << "Comparing results" << std::endl;
+		std::cout << "Comparing results" << std::endl;
 
 //  compareResultsAscii("/home/wathsy/Cosmo/PISTONSampleData/Small/output/m000.499.allparticles.ascii", halo->numOfParticles, d, "TestCase vs Mergetree");
 
@@ -209,11 +216,11 @@ int main(int argc, char* argv[])
 
 //	compareResults(a, c, halo->numOfParticles, "Naive vs Kdtree");
 //	compareResults(b, c, halo->numOfParticles, "Vtk (thrust version) vs Kdtree");
-//	compareResults(c, d, halo->numOfParticles, "Kdtree vs Mergetree");
+	compareResults(c, d, halo->numOfParticles, "Kdtree vs Mergetree");
 
 //std::cout << "d	 "; thrust::copy(d.begin(), d.begin()+halo->numOfParticles, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
 
-  std::cout << "--------------------" << std::endl;
+  std::cout << "-----------------------------" << std::endl << std::endl;
 
 	return 0;
 }

@@ -31,6 +31,7 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <map>
 #include <string>
 #include <sys/time.h>
 #include <cmath>
@@ -55,7 +56,7 @@ public:
 	struct Node
 	{
 		int   nodeId; // particle Id
-    int   haloId; // halo Id, store the min particle id of the particles in this halo
+    int   haloId, haloIdOri; // halo Id, store the min particle id of the particles in this halo
 
 		int   count;  // store number of particles in the halo at this level
 		float value;  // function value of this node (which is the distance value)
@@ -68,7 +69,7 @@ public:
 		Node *childE, *childS, *sibling;       
 
 		__host__ __device__
-		Node() { nodeId=-1; value=0.0f; haloId=-1; count=0;	
+		Node() { nodeId=-1; value=0.0f; haloId=-1; haloIdOri=-1; count=0;
 						 parent=NULL; parentSuper=NULL; childS=NULL; childE=NULL; sibling=NULL; }
 
 		__host__ __device__
@@ -140,10 +141,6 @@ public:
 	thrust::device_vector<float>  inputM_f;	      
   thrust::device_vector<float>  inputX_f, inputY_f, inputZ_f;    
   thrust::device_vector<float>  inputVX_f, inputVY_f, inputVZ_f;    
-
-	std::vector<int>   vecI;
-	std::vector<float> vecM;
-	std::vector<Point> vec, vecV;
 
   // variables needed to create random numbers
   thrust::default_random_engine rng;
@@ -217,11 +214,11 @@ public:
 
 		// declare temporary read buffers
 		float fBlock[nfloat];
-		int iBlock[nint];
+		int   iBlock[nint];
 		
 		// compute the number of particles
 		myfile->seekg(0L, std::ios::end);
-		numOfParticles = myfile->tellg() / 32; // get particle size in file
+		numOfParticles = myfile->tellg() / (nfloat*sizeof(float)+nint*sizeof(int)); // get particle size in file
 
 		// get the fraction wanted
 		numOfParticles = numOfParticles / n; 
@@ -248,7 +245,6 @@ public:
 		{
 			// Set file pointer to the requested particle
 			myfile->read(reinterpret_cast<char*>(fBlock), nfloat * sizeof(float));
-
 			if (myfile->gcount() != (int)(nfloat * sizeof(float))) {
 				std::cout << "Premature end-of-file" << std::endl;
 				return false;
@@ -265,7 +261,7 @@ public:
 			inputZ_h[i] = fBlock[4];	inputVZ_h[i] = fBlock[5];
 			inputM_h[i] = fBlock[6];
 
-			inputI_h[i] = i; //iBlock[0];
+			inputI_h[i] = iBlock[0]; // i;
 		}
 		myfile->close();
 
@@ -284,7 +280,7 @@ public:
 		for(int i=0; i<numOfParticles; i++)
 		{
 			Node n = Node();
-			n.nodeId = i;	n.haloId = i;	n.count  = 1;
+			n.nodeId = i;	n.haloId = i; n.haloIdOri = inputI[i];	n.count = 1;
 			n.pos = Point(inputX[i], inputY[i], inputZ[i]);
 			n.vel = Point(inputVX[i], inputVY[i], inputVZ[i]);
 			n.mass = inputM[i];
@@ -316,19 +312,20 @@ public:
 		int nfloat = 7, nint = 1;
 
 		// declare temporary read buffers
-		float fBlock[nfloat];
-		long  iBlock[nint];
-		int   iBlockTmp[nint];
+		float    fBlock[nfloat];
+		long int iBlock[nint];
+		int      iBlockTmp[nint];
 
 		// compute the number of particles
 		myfile->seekg(0L, std::ios::end);
-		numOfParticles = myfile->tellg() / (nfloat*sizeof(float)+nint*sizeof(long)); // get particle size in file
+		numOfParticles = myfile->tellg() / (nfloat*sizeof(float)+nint*sizeof(long int)); // get particle size in file
 
 		// get the fraction wanted
-		numOfParticles = numOfParticles / n; 
+ 		numOfParticles = numOfParticles / n;
 
 		// rewind file to beginning for particle reads
-		myfile->seekg(0L, std::ios::beg);
+
+ 		myfile->seekg(0L, std::ios::beg);
 
 		// Create one for output file
 		std::ofstream *outStream = new std::ofstream();
@@ -342,21 +339,62 @@ public:
 				return false;
 			}
 
-			myfile->read(reinterpret_cast<char*>(iBlock), nint * sizeof(long));
-			if (myfile->gcount() != (int)(nint * sizeof(long))) {
+			myfile->read(reinterpret_cast<char*>(iBlock), nint * sizeof(long int));
+			if (myfile->gcount() != (int)(nint * sizeof(long int))) {
 				std::cout << "Premature end-of-file" << std::endl;
 				return false;
 			}
 
-			for (int j=0; j<nint; j++)
-			  iBlockTmp[j] = i; //(int)iBlockTmp[j];
+			iBlockTmp[0] = (int) iBlock[0]; //i;
 
 			// write to file
 		  outStream->write(reinterpret_cast<const char*>(fBlock), nfloat * sizeof(float));
 		  outStream->write(reinterpret_cast<const char*>(iBlockTmp), nint * sizeof(int));
-		}	
+		}
 		outStream->close();
 		myfile->close();
+
+    {
+      std::string filename = "/home/wathsy/Desktop/HaloFinder/data/Small/output/m000.499.allparticles.ascii";
+      std::ifstream *myfile = new std::ifstream(filename.c_str(), std::ios::in);
+      if (!myfile->is_open()) { std::cout << "File: " << filename << "." << format << " cannot be opened \n"; return false; }
+
+      std::map<int,int> vec;
+
+      std::string line;
+      if (myfile->is_open())
+      {
+        int count = 0;
+        while(count++<7)
+          getline(*myfile,line);
+
+        count = 0;
+        while(getline(*myfile,line))
+        {
+          count++;
+
+          float x, y, z, vx, vy, vz;
+          int id, fof_halo_tag;
+
+          std::string sub;
+          std::istringstream iss(line);
+
+          iss >> sub; x = atof(sub.c_str());  iss >> sub; y = atof(sub.c_str());  iss >> sub; z = atof(sub.c_str());
+          iss >> sub; vx = atof(sub.c_str()); iss >> sub; vy = atof(sub.c_str()); iss >> sub; vz = atof(sub.c_str());
+          iss >> sub; id = atoi(sub.c_str()); iss >> sub; fof_halo_tag = atoi(sub.c_str());
+
+          std::map<int,int>::iterator tIt = vec.find(id);
+          if(tIt == vec.end())
+            vec.insert(std::map<int,int>::value_type(id,fof_halo_tag));
+          else
+            std::cout << (tIt->first) << " " << id << " - " << (tIt->second) << " " << fof_halo_tag << std::endl;
+        }
+
+        std::cout << count-vec.size() << " out of " << count << " is duplicate. Rest is " << vec.size() << std::endl;
+
+        myfile->close();
+      }
+    }
 
 		n = 1;	
 
@@ -394,14 +432,14 @@ public:
 
 			int i = 0;
 			strtok((char*)line.c_str(), ",");		
-			while(++i<7) strtok (NULL, ",");
+			while(++i<4) strtok (NULL, ",");
+			iBlock[0] = atoi(strtok(NULL, ",")); //num++;
 
+			while(++i<7) strtok (NULL, ",");
 			fBlock[0] = atof(strtok(NULL, ","));	fBlock[1] = 0;
 			fBlock[2] = atof(strtok(NULL, ","));	fBlock[3] = 0;
 			fBlock[4] = atof(strtok(NULL, ","));	fBlock[5] = 0;
 			fBlock[6] = 1;
-
-			iBlock[0] = num++;
 
 			// write to file
 		  outStream->write(reinterpret_cast<const char*>(fBlock), nfloat * sizeof(float));
