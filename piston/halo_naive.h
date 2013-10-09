@@ -23,12 +23,11 @@ public:
 		particleSize  = particleSize;
 
 		// no valid particles, return
-		if(numOfParticles==0)
-			return;
+		if(numOfParticles==0) return;
 
 		// get the first & last of the zip iterator
-		ParticleTupleZipIterator first = thrust::make_zip_iterator(thrust::make_tuple(inputX.begin(), inputY.begin(), inputZ.begin()));
-		ParticleTupleZipIterator last  = thrust::make_zip_iterator(thrust::make_tuple(inputX.end(),   inputY.end(),   inputZ.end()));
+		ParticleTupleZipIterator first = thrust::make_zip_iterator(thrust::make_tuple(leafX.begin(), leafY.begin(), leafZ.begin()));
+		ParticleTupleZipIterator last  = thrust::make_zip_iterator(thrust::make_tuple(leafX.end(),   leafY.end(),   leafZ.end()));
 
 		struct timeval begin, mid, end, diff1, diff2;
 		gettimeofday(&begin, 0);
@@ -40,7 +39,7 @@ public:
 		{
 			// get all the valid particles for the current particle
 			thrust::transform(CountingIterator(0), CountingIterator(0)+numOfParticles, result.begin(),
-					inTheSameHalo(thrust::raw_pointer_cast(&*inputX.begin()), thrust::raw_pointer_cast(&*inputY.begin()), thrust::raw_pointer_cast(&*inputZ.begin()),
+					inTheSameHalo(thrust::raw_pointer_cast(&*leafX.begin()), thrust::raw_pointer_cast(&*leafY.begin()), thrust::raw_pointer_cast(&*leafZ.begin()),
 							 i, linkLength));
 			IntIterator new_end = thrust::remove(result.begin(), result.end(), -1);
 
@@ -89,19 +88,19 @@ public:
 	{
 		float linkLength;
 		int i;
-		float *inputX, *inputY, *inputZ;
+		float *leafX, *leafY, *leafZ;
 
 		__host__ __device__
-		inTheSameHalo(float *inputX, float *inputY, float *inputZ, int i, float linkLength) :
-			inputX(inputX), inputY(inputY), inputZ(inputZ), i(i), linkLength(linkLength)
+		inTheSameHalo(float *leafX, float *leafY, float *leafZ, int i, float linkLength) :
+			leafX(leafX), leafY(leafY), leafZ(leafZ), i(i), linkLength(linkLength)
 		    {}
 
 		__host__ __device__
 		int operator()(int j)
 		{
-			float xd   = std::fabs(inputX[j] - inputX[i]);
-			float yd   = std::fabs(inputY[j] - inputY[i]);
-			float zd   = std::fabs(inputZ[j] - inputZ[i]);
+			float xd   = std::fabs(leafX[j] - leafX[i]);
+			float yd   = std::fabs(leafY[j] - leafY[i]);
+			float zd   = std::fabs(leafZ[j] - leafZ[i]);
 			float dist = (float)std::sqrt(xd*xd + yd*yd + zd*zd);
 
 			if(xd<=linkLength && yd<=linkLength && zd<=linkLength)

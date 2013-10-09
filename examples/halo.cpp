@@ -173,13 +173,6 @@ int main(int argc, char* argv[])
   std::cout << filename << std::endl;
   std::cout << std::endl;
 
-  {
-    //read .hcosmo file
-
-    //read allparticles
-
-  }
-
   //---------------------------- run different versions
 
 //  std::cout << "Naive result" << std::endl;
@@ -193,7 +186,7 @@ int main(int argc, char* argv[])
 //  halo = new halo_vtk(filename, format, n, np, rL);
 //  (*halo)(linkLength, particleSize);
 //  thrust::device_vector<int> b = halo->getHalos();
-//
+
   std::cout << "Kdtree based result" << std::endl;
 
   halo = new halo_kd(filename, format, n, np, rL);
@@ -218,8 +211,10 @@ int main(int argc, char* argv[])
 //	compareResults(b, c, halo->numOfParticles, "Vtk (thrust version) vs Kdtree");
 	compareResults(c, d, halo->numOfParticles, "Kdtree vs Mergetree");
 
-//std::cout << "d	 "; thrust::copy(d.begin(), d.begin()+halo->numOfParticles, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
+//	std::cout << "c "; thrust::copy(c.begin(), c.begin()+halo->numOfParticles, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
+//	std::cout << "d "; thrust::copy(d.begin(), d.begin()+halo->numOfParticles, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
 
+	std::cout << std::endl;
   std::cout << "-----------------------------" << std::endl << std::endl;
 
 	return 0;

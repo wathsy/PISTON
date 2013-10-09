@@ -27,13 +27,13 @@
 
 #include <piston/kd.h>
 
+#include <sys/time.h>
 #include <sstream>
 #include <iostream>
 #include <fstream>
 #include <vector>
 #include <map>
 #include <string>
-#include <sys/time.h>
 #include <cmath>
 
 namespace piston
@@ -42,54 +42,6 @@ namespace piston
 class halo
 {
 public:
-	struct Point
-	{
-    float x, y, z;
-
-    __host__ __device__
-    Point(){}
-
-    __host__ __device__
-    Point(float x, float y, float z) : x(x), y(y), z(z) {}
-	};
-
-	struct Node
-	{
-		int   nodeId; // particle Id
-    int   haloId, haloIdOri; // halo Id, store the min particle id of the particles in this halo
-
-		int   count;  // store number of particles in the halo at this level
-		float value;  // function value of this node (which is the distance value)
-
-		Point pos;	// store x,y,z positions of particle
-		Point vel;  // store vx,vy,vz positions of particle
-		float mass;	// store mass of each particle
-
-		Node *parent, *parentSuper; 
-		Node *childE, *childS, *sibling;       
-
-		__host__ __device__
-		Node() { nodeId=-1; value=0.0f; haloId=-1; haloIdOri=-1; count=0;
-						 parent=NULL; parentSuper=NULL; childS=NULL; childE=NULL; sibling=NULL; }
-
-		__host__ __device__
-		Node(int nodeId, float value, int haloId, int count, Node *parent, Node *parentSuper) :
-			nodeId(nodeId), value(value), haloId(haloId), count(count), parent(parent), parentSuper(parentSuper) {}
-	};
-
-	struct Edge
-	{
-		int srcId, desId; // src & des Ids of particles
-		float weight;			// weight of the edge (which is the distance value)
-
-		__host__ __device__
-		Edge() { srcId=-1; desId=-1; weight=-1; }
-		
-		__host__ __device__
-		Edge(int srcId, int desId, float weight) : srcId(srcId), desId(desId), weight(weight) {}
-	};
-
-	typedef thrust::device_vector<Node>::iterator NodeIterator;
 
   // definitions
   typedef thrust::device_vector<float>::iterator FloatIterator;
@@ -118,16 +70,19 @@ public:
   int   numOfHalos;     		// total number of halos
   int   numOfHaloParticles; // total number of particles in halos
 
-	Point lBoundS, uBoundS; // lower & upper bounds of the entire space
+	float lBoundX, lBoundY, lBoundZ; // lower bound of the entire space
+	float uBoundX, uBoundY, uBoundZ; // upper bound of the entire space
 
-	thrust::device_vector<Node>  nodes; 		// leaf nodes of merge tree
-  thrust::device_vector<Node>  nodesTmp1; // parent nodes of merge tree
+	thrust::device_vector<int>    haloIndex; // halo indices for each particle
 
-	// stores particle information
-  thrust::device_vector<int>    inputI, inputM;							// index & mass for each particle
-  thrust::device_vector<float>  inputX, inputY, inputZ;	    // positions for each particle
-  thrust::device_vector<float>  inputVX, inputVY, inputVZ;	// velocities for each particle
-  thrust::device_vector<int>    haloIndex;	  			        // halo indices for each particle
+	// stores all node details of the merge tree
+  thrust::device_vector<int>    leafI, leafM;							// index & mass for each leaf
+  thrust::device_vector<float>  leafX, leafY, leafZ;	    // positions for each leaf
+  thrust::device_vector<float>  leafVX, leafVY, leafVZ;	  // velocities for each leaf
+  thrust::device_vector<float>  leafValue;                // value for each leaf
+  thrust::device_vector<int>    leafCount;                // count for each leaf
+  thrust::device_vector<int>    leafParent, leafParentS;
+  thrust::device_vector<int>    leafChildS, leafChildE, leafSibling;
 
 	// stores stats of each halos
   thrust::device_vector<int>    haloIndexUnique;            					 // unique halo indexes
@@ -138,9 +93,9 @@ public:
 
 	// stores details about just the particles which belong to halos
 	thrust::device_vector<int>    haloIndex_f;	  			
-	thrust::device_vector<float>  inputM_f;	      
-  thrust::device_vector<float>  inputX_f, inputY_f, inputZ_f;    
-  thrust::device_vector<float>  inputVX_f, inputVY_f, inputVZ_f;    
+	thrust::device_vector<float>  inputM_f;
+  thrust::device_vector<float>  inputX_f, inputY_f, inputZ_f;
+  thrust::device_vector<float>  inputVX_f, inputVY_f, inputVZ_f;
 
   // variables needed to create random numbers
   thrust::default_random_engine rng;
@@ -159,26 +114,27 @@ public:
     if(!readHaloFile(filename, format))
     {			
 //			generateUniformData();		// generate uniformly spaced points		
-			generateNonUniformData(); // generate nearby points to real data
+//			generateNonUniformData(); // generate nearby points to real data
 
-/*
 			numOfParticles = 8;
-			inputX = thrust::host_vector<float>(numOfParticles);
-			inputY = thrust::host_vector<float>(numOfParticles);
-			inputZ = thrust::host_vector<float>(numOfParticles);
+			leafX = thrust::host_vector<float>(numOfParticles);
+			leafY = thrust::host_vector<float>(numOfParticles);
+			leafZ = thrust::host_vector<float>(numOfParticles);
+			leafI = thrust::host_vector<float>(numOfParticles);
 
-			inputX[0] = 1.0;	inputY[0] = 1.0;	inputZ[0] = 0.0;
-			inputX[1] = 0.0;	inputY[1] = 4.0;	inputZ[1] = 0.0;
-			inputX[2] = 8.0;	inputY[2] = 3.0;	inputZ[2] = 0.0;
-			inputX[3] = 2.0;	inputY[3] = 6.0;	inputZ[3] = 0.0;
-			inputX[4] = 4.0;	inputY[4] = 2.0;	inputZ[4] = 0.0;
-			inputX[5] = 5.0;	inputY[5] = 5.0;	inputZ[5] = 0.0;
-			inputX[6] = 3.0;	inputY[6] = 4.0;	inputZ[6] = 0.0;
-			inputX[7] = 3.5;	inputY[7] = 4.5;	inputZ[7] = 0.0;
-*/
+			leafX[0] = 1.0;	leafY[0] = 1.0;	leafZ[0] = 0.0; leafI[0] = 0;
+			leafX[1] = 0.0;	leafY[1] = 4.0;	leafZ[1] = 0.0; leafI[1] = 1;
+			leafX[2] = 8.0;	leafY[2] = 3.0;	leafZ[2] = 0.0; leafI[2] = 2;
+			leafX[3] = 2.0;	leafY[3] = 6.0;	leafZ[3] = 0.0; leafI[3] = 3;
+			leafX[4] = 4.0;	leafY[4] = 2.0;	leafZ[4] = 0.0; leafI[4] = 4;
+			leafX[5] = 5.0;	leafY[5] = 5.0;	leafZ[5] = 0.0; leafI[5] = 5;
+			leafX[6] = 3.0;	leafY[6] = 4.0;	leafZ[6] = 0.0; leafI[6] = 6;
+			leafX[7] = 3.5;	leafY[7] = 4.5;	leafZ[7] = 0.0; leafI[7] = 7;
 
 			std::cout << "Test data loaded \n";
     }
+
+    getBounds();
 
     haloIndex.resize(numOfParticles);
     thrust::copy(CountingIterator(0), CountingIterator(0)+numOfParticles, haloIndex.begin());
@@ -188,7 +144,10 @@ public:
 
   virtual void operator()(float linkLength , int  particleSize) {}
 
-  // read input file - currently can read a .cosmo file or a .csv file
+
+  //------- read input files
+
+  // read input file - currently can read a .cosmo, .hcosmo or .csv file
   // .csv file - when you have a big data file and you want a piece of it, load it in VTK and slice it and save it as .csv file, within this function it will rewrite the date to .cosmo format
   bool readHaloFile(std::string filename, std::string format)
   {
@@ -201,7 +160,7 @@ public:
     return false;
   }
 
-  // read a .cosmo file and load the data to inputX, inputY & inputZ
+  // read a .cosmo file and load the data to leafX, leafY & leafZ
 	bool readCosmoFile(std::string filename, std::string format)
 	{
 		// open .cosmo file
@@ -223,23 +182,22 @@ public:
 		// get the fraction wanted
 		numOfParticles = numOfParticles / n; 
 
-		// resize inputX, inputY & inputZ 
-		inputX.resize(numOfParticles);	inputY.resize(numOfParticles);	inputZ.resize(numOfParticles);
-		inputVX.resize(numOfParticles);	inputVY.resize(numOfParticles);	inputVZ.resize(numOfParticles);
-		inputM.resize(numOfParticles);	
-		inputI.resize(numOfParticles);
+		// resize
+		leafX.resize(numOfParticles);	      leafY.resize(numOfParticles);	   leafZ.resize(numOfParticles);
+		leafVX.resize(numOfParticles);	    leafVY.resize(numOfParticles);	 leafVZ.resize(numOfParticles);
+		leafM.resize(numOfParticles);       leafI.resize(numOfParticles);
 
 		// rewind file to beginning for particle reads
 		myfile->seekg(0L, std::ios::beg);
 
-		thrust::host_vector<float> inputX_h(numOfParticles);
-		thrust::host_vector<float> inputY_h(numOfParticles);
-		thrust::host_vector<float> inputZ_h(numOfParticles);
-		thrust::host_vector<float> inputVX_h(numOfParticles);
-		thrust::host_vector<float> inputVY_h(numOfParticles);
-		thrust::host_vector<float> inputVZ_h(numOfParticles);
-		thrust::host_vector<float> inputM_h(numOfParticles);
-		thrust::host_vector<float> inputI_h(numOfParticles);
+		thrust::host_vector<float> leafX_h(numOfParticles);
+		thrust::host_vector<float> leafY_h(numOfParticles);
+		thrust::host_vector<float> leafZ_h(numOfParticles);
+		thrust::host_vector<float> leafVX_h(numOfParticles);
+		thrust::host_vector<float> leafVY_h(numOfParticles);
+		thrust::host_vector<float> leafVZ_h(numOfParticles);
+		thrust::host_vector<float> leafM_h(numOfParticles);
+		thrust::host_vector<float> leafI_h(numOfParticles);
 
 		for (int i=0; i<numOfParticles; i++)
 		{
@@ -256,53 +214,28 @@ public:
 				return false;
 			}
 
-			inputX_h[i] = fBlock[0];	inputVX_h[i] = fBlock[1];
-			inputY_h[i] = fBlock[2];	inputVY_h[i] = fBlock[3];
-			inputZ_h[i] = fBlock[4];	inputVZ_h[i] = fBlock[5];
-			inputM_h[i] = fBlock[6];
+			leafX_h[i] = fBlock[0];	leafVX_h[i] = fBlock[1];
+			leafY_h[i] = fBlock[2];	leafVY_h[i] = fBlock[3];
+			leafZ_h[i] = fBlock[4];	leafVZ_h[i] = fBlock[5];
+			leafM_h[i] = fBlock[6];
 
-			inputI_h[i] = iBlock[0]; // i;
+			leafI_h[i] = i; //iBlock[0];
 		}
 		myfile->close();
 
-		thrust::copy(inputX_h.begin(),  inputX_h.end(),  inputX.begin());
-		thrust::copy(inputY_h.begin(),  inputY_h.end(),  inputY.begin());
-		thrust::copy(inputZ_h.begin(),  inputZ_h.end(),  inputZ.begin());
-		thrust::copy(inputVX_h.begin(), inputVX_h.end(), inputVX.begin());
-		thrust::copy(inputVY_h.begin(), inputVY_h.end(), inputVY.begin());
-		thrust::copy(inputVZ_h.begin(), inputVZ_h.end(), inputVZ.begin());
-		thrust::copy(inputM_h.begin(),  inputM_h.end(),  inputM.begin());
-		thrust::copy(inputI_h.begin(),  inputI_h.end(),  inputI.begin());
-
-//-------------------
-		nodes.resize(numOfParticles);
-		thrust::host_vector<Node> nodes_h(numOfParticles);
-		for(int i=0; i<numOfParticles; i++)
-		{
-			Node n = Node();
-			n.nodeId = i;	n.haloId = i; n.haloIdOri = inputI[i];	n.count = 1;
-			n.pos = Point(inputX[i], inputY[i], inputZ[i]);
-			n.vel = Point(inputVX[i], inputVY[i], inputVZ[i]);
-			n.mass = inputM[i];
-
-			nodes_h[i] = n;
-		}
-		thrust::copy(nodes_h.begin(),  nodes_h.end(),  nodes.begin());
-//-------------------
-
-		// get bounds of the space
-		typedef thrust::pair<thrust::device_vector<float>::iterator, thrust::device_vector<float>::iterator> result_type;
-		result_type result1 = thrust::minmax_element(inputX.begin(), inputX.end());
-		result_type result2 = thrust::minmax_element(inputY.begin(), inputY.end());
-		result_type result3 = thrust::minmax_element(inputZ.begin(), inputZ.end());
-
-		lBoundS = Point(*result1.first,  *result2.first,  *result3.first);
-		uBoundS = Point(*result1.second, *result2.second, *result3.second);
+		thrust::copy(leafX_h.begin(),  leafX_h.end(),  leafX.begin());
+		thrust::copy(leafY_h.begin(),  leafY_h.end(),  leafY.begin());
+		thrust::copy(leafZ_h.begin(),  leafZ_h.end(),  leafZ.begin());
+		thrust::copy(leafVX_h.begin(), leafVX_h.end(), leafVX.begin());
+		thrust::copy(leafVY_h.begin(), leafVY_h.end(), leafVY.begin());
+		thrust::copy(leafVZ_h.begin(), leafVZ_h.end(), leafVZ.begin());
+		thrust::copy(leafM_h.begin(),  leafM_h.end(),  leafM.begin());
+		thrust::copy(leafI_h.begin(),  leafI_h.end(),  leafI.begin());
 
 		return true;
 	}
 
-	// read a .hcosmo file and load the data to inputX, inputY & inputZ
+	// read a .hcosmo file and load the data to leafX, leafY & leafZ
 	bool readHCosmoFile(std::string filename, std::string format)
 	{
 		// open .hcosmo file
@@ -454,19 +387,22 @@ public:
     return true;
   }
 
+
+  //------- generate data
+
 	// generate uniform data & write it to .cosmo format & then read from that
 	void generateUniformData()
 	{
 		// set bounds
-		lBoundS = Point(0.1, 0.1, 0.1);
-		uBoundS = Point(11.2, 11.2, 11.2);
+	  lBoundX = 0.1;   lBoundY = 0.1;   lBoundZ = 0.1;
+	  uBoundX = 11.2;  uBoundY = 11.2;  uBoundZ = 11.2;
 
 		int nX=16, nY=16, nZ=16;
 		numOfParticles = nX*nY*nZ;		
 
-		double startX=lBoundS.x;	double stepX=(uBoundS.x-lBoundS.x)/(nX-1);
-		double startY=lBoundS.y;	double stepY=(uBoundS.y-lBoundS.y)/(nY-1);
-		double startZ=lBoundS.z; 	double stepZ=(uBoundS.z-lBoundS.z)/(nZ-1);		
+		double startX=lBoundX;	double stepX=(uBoundX-lBoundX)/(nX-1);
+		double startY=lBoundY;	double stepY=(uBoundY-lBoundY)/(nY-1);
+		double startZ=lBoundZ; 	double stepZ=(uBoundZ-lBoundZ)/(nZ-1);
 
 		int nfloat = 7, nint = 1;
 
@@ -538,18 +474,18 @@ public:
 		{
 			for(int j=1; j<numPoints; j++)
 			{
-				float x = (float)(inputX[i] + u(rng));	
-				float y = (float)(inputY[i] + u(rng));	
-				float z = (float)(inputZ[i] + u(rng));
+				float x = (float)(leafX[i] + u(rng));
+				float y = (float)(leafY[i] + u(rng));
+				float z = (float)(leafZ[i] + u(rng));
 
-				while(x<lBoundS.x || x>uBoundS.x) x = (float)(inputX[i] + u(rng));	
-				while(y<lBoundS.y || y>uBoundS.y) y = (float)(inputY[i] + u(rng));	
-				while(z<lBoundS.z || z>uBoundS.z) z = (float)(inputZ[i] + u(rng));
+				while(x<lBoundX || x>uBoundX) x = (float)(leafX[i] + u(rng));
+				while(y<lBoundY || y>uBoundY) y = (float)(leafY[i] + u(rng));
+				while(z<lBoundZ || z>uBoundZ) z = (float)(leafZ[i] + u(rng));
 
-				fBlock[0] = x;	fBlock[1] = inputVX[i];
-				fBlock[2] = y;	fBlock[3] = inputVY[i];
-				fBlock[4] = z;	fBlock[5] = inputVZ[i];
-				fBlock[6] = inputM[i];
+				fBlock[0] = x;	fBlock[1] = leafVX[i];
+				fBlock[2] = y;	fBlock[3] = leafVY[i];
+				fBlock[4] = z;	fBlock[5] = leafVZ[i];
+				fBlock[6] = leafM[i];
 
 				iBlock[0] = num++;
 
@@ -567,6 +503,9 @@ public:
 		// read .cosmo file
 		readCosmoFile(convertInt(numOfParticles), "cosmo"); 
 	}	
+
+
+	//------- other functions
 
 	// write halo id details for each particle in to a .txt file
 	void writeHaloResults()
@@ -598,14 +537,15 @@ public:
 	// get lower & upper bounds of the entire space
 	void getBounds()
 	{
-		typedef thrust::pair<thrust::device_vector<float>::iterator, thrust::device_vector<float>::iterator> result_type;
-		result_type result1 = thrust::minmax_element(inputX.begin(), inputX.end());
-		result_type result2 = thrust::minmax_element(inputY.begin(), inputY.end());
-		result_type result3 = thrust::minmax_element(inputZ.begin(), inputZ.end());
+		// get bounds of the space
+    typedef thrust::pair<thrust::device_vector<float>::iterator, thrust::device_vector<float>::iterator> result_type;
+    result_type result1 = thrust::minmax_element(leafX.begin(), leafX.end());
+    result_type result2 = thrust::minmax_element(leafY.begin(), leafY.end());
+    result_type result3 = thrust::minmax_element(leafZ.begin(), leafZ.end());
 
-		// set bounds
-		lBoundS = Point(*result1.first,  *result2.first,  *result3.first);
-		uBoundS = Point(*result1.second, *result2.second, *result3.second);
+    // set bounds
+    lBoundX = *result1.first;   lBoundY = *result2.first;   lBoundZ = *result3.first;
+    uBoundX = *result1.second;  uBoundY = *result2.second;  uBoundZ = *result3.second;
 	}
 
 	// get the index in haloIndexUnique for a halo i
@@ -657,26 +597,14 @@ public:
   // get start of vertices
   Float3zipIterator vertices_begin()
   {
-    return thrust::make_zip_iterator(thrust::make_tuple(inputX.begin(), inputY.begin(), inputZ.begin()));
+    return thrust::make_zip_iterator(thrust::make_tuple(leafX.begin(), leafY.begin(), leafZ.begin()));
   }
 
   // get end of vertices
   Float3zipIterator vertices_end()
   {
-    return thrust::make_zip_iterator(thrust::make_tuple(inputX.end(), inputY.end(), inputZ.end()));
+    return thrust::make_zip_iterator(thrust::make_tuple(leafX.end(), leafY.end(), leafZ.end()));
   }
-
-	// get start of vertices
-	NodeIterator nodevertices_begin()
-	{
-		return nodes.begin();
-	}
-
-	// get end of vertices
-	NodeIterator nodevertices_end()
-	{
-		return nodes.end();
-	}
 
 	// get start of vertices_f 
   Float3zipIterator vertices_begin_f()

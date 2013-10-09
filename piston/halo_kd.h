@@ -104,55 +104,55 @@ public:
 
     void operator()(float linkLength , int  particleSize)
     {
-        clear();
+      clear();
 
-        linkLength   = linkLength*xscal;
-        particleSize  = particleSize;
+      linkLength   = linkLength*xscal;
+      particleSize  = particleSize;
 
-        // no valid particles, return
-        if(numOfParticles==0) return;
+      // no valid particles, return
+      if(numOfParticles==0) return;
 
-        // set vectors for halo finding
-        nextp.resize(numOfParticles);
-        thrust::fill(nextp.begin(), nextp.end(), -1);
+      // set vectors for halo finding
+      nextp.resize(numOfParticles);
+      thrust::fill(nextp.begin(), nextp.end(), -1);
 
-        struct timeval begin, mid, end, diff1, diff2;
-        gettimeofday(&begin, 0);
-        
-				findHalos(linkLength, numOfParticles);
+      struct timeval begin, mid, end, diff1, diff2;
+      gettimeofday(&begin, 0);
 
-				thrust::device_vector<int> tmp; tmp.resize(haloIndex.size());
-				thrust::scatter(haloIndex.begin(), haloIndex.end(), haloIndexOriginal.begin(), tmp.begin());
-				thrust::copy(tmp.begin(), tmp.end(), haloIndex.begin());
+      findHalos(linkLength, numOfParticles);
 
-				// set correct halo ids
-				thrust::fill(tmp.begin(), tmp.end(), -1);
-				for(int i=0; i<numOfParticles; i++)
-				{
-					if(tmp[i]==-1)
-					{
-						thrust::for_each(CountingIterator(i), CountingIterator(numOfParticles),
-								setCorrectHaloId(thrust::raw_pointer_cast(&*haloIndex.begin()), thrust::raw_pointer_cast(&*tmp.begin()), haloIndex[i], i));
-					}
-				}
-				thrust::copy(tmp.begin(), tmp.end(), haloIndex.begin());
+      thrust::device_vector<int> tmp; tmp.resize(haloIndex.size());
+      thrust::scatter(haloIndex.begin(), haloIndex.end(), haloIndexOriginal.begin(), tmp.begin());
+      thrust::copy(tmp.begin(), tmp.end(), haloIndex.begin());
 
-        gettimeofday(&mid, 0);
-				getUniqueHalos(particleSize); // get the unique valid halo ids
-        gettimeofday(&end, 0);
+      // set correct halo ids
+      thrust::fill(tmp.begin(), tmp.end(), -1);
+      for(int i=0; i<numOfParticles; i++)
+      {
+        if(tmp[i]==-1)
+        {
+          thrust::for_each(CountingIterator(i), CountingIterator(numOfParticles),
+              setCorrectHaloId(thrust::raw_pointer_cast(&*haloIndex.begin()), thrust::raw_pointer_cast(&*tmp.begin()), haloIndex[i], i));
+        }
+      }
+      thrust::copy(tmp.begin(), tmp.end(), haloIndex.begin());
 
-        timersub(&mid, &begin, &diff1);
-        float seconds1 = diff1.tv_sec + 1.0E-6*diff1.tv_usec;
-        std::cout << "Time elapsed: " << seconds1 << " s for merging"<< std::endl << std::flush;
-        timersub(&end, &mid, &diff2);
-        float seconds2 = diff2.tv_sec + 1.0E-6*diff2.tv_usec;
-        std::cout << "Time elapsed: " << seconds2 << " s for finding valid halos"<< std::endl << std::flush;
+      gettimeofday(&mid, 0);
+      getUniqueHalos(particleSize); // get the unique valid halo ids
+      gettimeofday(&end, 0);
 
-				totalTime += (seconds1 + seconds2);
-				std::cout << "Total time elapsed: " << totalTime << " s" << std::endl << std::endl;
+      timersub(&mid, &begin, &diff1);
+      float seconds1 = diff1.tv_sec + 1.0E-6*diff1.tv_usec;
+      std::cout << "Time elapsed: " << seconds1 << " s for merging"<< std::endl << std::flush;
+      timersub(&end, &mid, &diff2);
+      float seconds2 = diff2.tv_sec + 1.0E-6*diff2.tv_usec;
+      std::cout << "Time elapsed: " << seconds2 << " s for finding valid halos"<< std::endl << std::flush;
 
-        setColors(); // set colors to halos
-        std::cout << "Number of Particles : " << numOfParticles <<  " Number of Halos found : " << numOfHalos << std::endl << std::endl;
+      totalTime += (seconds1 + seconds2);
+      std::cout << "Total time elapsed: " << totalTime << " s" << std::endl << std::endl;
+
+      setColors(); // set colors to halos
+      std::cout << "Number of Particles : " << numOfParticles <<  " Number of Halos found : " << numOfHalos << std::endl << std::endl;
     }
 
     struct setCorrectHaloId
@@ -328,7 +328,7 @@ public:
     void getRanksForAllSegments(KDtreeNode* tree)
     {
         ktree = new KDTree();
-        ktree->initializeTree(inputX, inputY, inputZ);
+        ktree->initializeTree(leafX, leafY, leafZ);
 
         thrust::device_vector<int>::iterator rankFirst, pointId;
         for(int l=0; l<levels; l++)
@@ -342,19 +342,19 @@ public:
           Level currentL = levelInfo[l];
           thrust::for_each(CountingIterator(currentL.startInd), CountingIterator(currentL.startInd)+currentL.size,
               setSplitValue(thrust::raw_pointer_cast(&*rankFirst),
-                  thrust::raw_pointer_cast(&*inputX.begin()), thrust::raw_pointer_cast(&*inputY.begin()), thrust::raw_pointer_cast(&*inputZ.begin()),
+                  thrust::raw_pointer_cast(&*leafX.begin()), thrust::raw_pointer_cast(&*leafY.begin()), thrust::raw_pointer_cast(&*leafZ.begin()),
                   thrust::raw_pointer_cast(&*pointId), tree, l));
           if (l+1 < levels) ktree->buildTreeLevel(l+1);
         }
 
-        thrust::device_vector<float> inputReorder;  inputReorder.resize(inputX.size());
-        thrust::copy(thrust::make_permutation_iterator(inputX.begin(), pointId), thrust::make_permutation_iterator(inputX.end(), pointId+inputX.size())
-, inputReorder.begin());
-        thrust::copy(inputReorder.begin(), inputReorder.end(), inputX.begin());
-        thrust::copy(thrust::make_permutation_iterator(inputY.begin(), pointId), thrust::make_permutation_iterator(inputY.end(), pointId+inputX.size()), inputReorder.begin());
-        thrust::copy(inputReorder.begin(), inputReorder.end(), inputY.begin());
-        thrust::copy(thrust::make_permutation_iterator(inputZ.begin(), pointId), thrust::make_permutation_iterator(inputZ.end(), pointId+inputX.size()), inputReorder.begin());
-        thrust::copy(inputReorder.begin(), inputReorder.end(), inputZ.begin());
+        thrust::device_vector<float> leafReorder;  leafReorder.resize(leafX.size());
+        thrust::copy(thrust::make_permutation_iterator(leafX.begin(), pointId), thrust::make_permutation_iterator(leafX.end(), pointId+leafX.size())
+, leafReorder.begin());
+        thrust::copy(leafReorder.begin(), leafReorder.end(), leafX.begin());
+        thrust::copy(thrust::make_permutation_iterator(leafY.begin(), pointId), thrust::make_permutation_iterator(leafY.end(), pointId+leafX.size()), leafReorder.begin());
+        thrust::copy(leafReorder.begin(), leafReorder.end(), leafY.begin());
+        thrust::copy(thrust::make_permutation_iterator(leafZ.begin(), pointId), thrust::make_permutation_iterator(leafZ.end(), pointId+leafX.size()), leafReorder.begin());
+        thrust::copy(leafReorder.begin(), leafReorder.end(), leafZ.begin());
 
         thrust::device_vector<int> haloIdReorder;  haloIdReorder.resize(haloIndexOriginal.size());
         thrust::copy(thrust::make_permutation_iterator(haloIndexOriginal.begin(), pointId),
@@ -370,13 +370,13 @@ public:
     struct setSplitValue : public thrust::unary_function<int, void>
     {
         int *rankFirst, *pointInd;
-		float *inputX, *inputY, *inputZ;
+		float *leafX, *leafY, *leafZ;
 		KDtreeNode* tree;
 		int l;
 
 		__host__ __device__
-		setSplitValue(int* rankFirst, float *inputX, float *inputY, float *inputZ, int* pointInd, KDtreeNode* tree, int l) :
-				  rankFirst(rankFirst), inputX(inputX), inputY(inputY), inputZ(inputZ), pointInd(pointInd), tree(tree), l(l) {}
+		setSplitValue(int* rankFirst, float *leafX, float *leafY, float *leafZ, int* pointInd, KDtreeNode* tree, int l) :
+				  rankFirst(rankFirst), leafX(leafX), leafY(leafY), leafZ(leafZ), pointInd(pointInd), tree(tree), l(l) {}
 
 		__host__ __device__
 		void operator()(int i)
@@ -393,9 +393,9 @@ public:
 				if(rankFirst[current->startInd+j] == lSplit-1) leftInd = pointInd[current->startInd+j];
 				if(rankFirst[current->startInd+j] == lSplit) rightInd = pointInd[current->startInd+j];
 			}
-			if(l%3 == 0) current->splitValue = (float) (inputX[leftInd] + inputX[rightInd])/2;
-			else if(l%3 == 1) current->splitValue = (float) (inputY[leftInd] + inputY[rightInd])/2;
-			else current->splitValue = (float) (inputZ[leftInd] + inputZ[rightInd])/2;
+			if(l%3 == 0) current->splitValue = (float) (leafX[leftInd] + leafX[rightInd])/2;
+			else if(l%3 == 1) current->splitValue = (float) (leafY[leftInd] + leafY[rightInd])/2;
+			else current->splitValue = (float) (leafZ[leftInd] + leafZ[rightInd])/2;
 		}
     };
 
@@ -410,7 +410,7 @@ public:
 			int size     = currentL.size;
 
 			thrust::for_each(CountingIterator(startInd), CountingIterator(startInd)+size, getBound(thrust::raw_pointer_cast(&*kd_tree.begin()),
-				   thrust::raw_pointer_cast(&*inputX.begin()), thrust::raw_pointer_cast(&*inputY.begin()), thrust::raw_pointer_cast(&*inputZ.begin()),
+				   thrust::raw_pointer_cast(&*leafX.begin()), thrust::raw_pointer_cast(&*leafY.begin()), thrust::raw_pointer_cast(&*leafZ.begin()),
 				   thrust::raw_pointer_cast(&*uBoundsX.begin()), thrust::raw_pointer_cast(&*uBoundsY.begin()), thrust::raw_pointer_cast(&*uBoundsZ.begin()),
 				   thrust::raw_pointer_cast(&*lBoundsX.begin()), thrust::raw_pointer_cast(&*lBoundsY.begin()), thrust::raw_pointer_cast(&*lBoundsZ.begin()) ));
 		}
@@ -423,14 +423,14 @@ public:
 		float  *uBoundsX, *uBoundsY, *uBoundsZ;
 		float  *lBoundsX, *lBoundsY, *lBoundsZ;
 
-		float *inputX, *inputY, *inputZ;
+		float *leafX, *leafY, *leafZ;
 
 		__host__ __device__
 		getBound(KDtreeNode* kd_tree,
-			 float *inputX, float *inputY, float *inputZ,
+			 float *leafX, float *leafY, float *leafZ,
 			 float *uBoundsX, float *uBoundsY, float *uBoundsZ,
 			 float *lBoundsX, float *lBoundsY, float *lBoundsZ) :
-			 kd_tree(kd_tree), inputX(inputX), inputY(inputY), inputZ(inputZ),
+			 kd_tree(kd_tree), leafX(leafX), leafY(leafY), leafZ(leafZ),
 				 uBoundsX(uBoundsX), uBoundsY(uBoundsY), uBoundsZ(uBoundsZ),
 			 lBoundsX(lBoundsX), lBoundsY(lBoundsY), lBoundsZ(lBoundsZ) {}
 
@@ -444,14 +444,14 @@ public:
 
 			if(lChildInd == -1 && rChildInd == -1)
 			{
-				uBoundsX[i] = inputX[n.ind];
-				lBoundsX[i] = inputX[n.ind];
+				uBoundsX[i] = leafX[n.ind];
+				lBoundsX[i] = leafX[n.ind];
 
-				uBoundsY[i] = inputY[n.ind];
-				lBoundsY[i] = inputY[n.ind];
+				uBoundsY[i] = leafY[n.ind];
+				lBoundsY[i] = leafY[n.ind];
 
-				uBoundsZ[i] = inputZ[n.ind];
-				lBoundsZ[i] = inputZ[n.ind];
+				uBoundsZ[i] = leafZ[n.ind];
+				lBoundsZ[i] = leafZ[n.ind];
 				return;
 			}
 			else if(lChildInd != -1 && rChildInd == -1)
@@ -568,7 +568,7 @@ public:
 			// get the nodes within the boundary
 			thrust::for_each(CountingIterator(0), CountingIterator(0)+numOfParticles,
 					 setNodesWithinBoundary(thrust::raw_pointer_cast(&*childBB.begin()), thrust::raw_pointer_cast(&*splitValue.begin()),
-								thrust::raw_pointer_cast(&*inputX.begin()), thrust::raw_pointer_cast(&*inputY.begin()), thrust::raw_pointer_cast(&*inputZ.begin()),
+								thrust::raw_pointer_cast(&*leafX.begin()), thrust::raw_pointer_cast(&*leafY.begin()), thrust::raw_pointer_cast(&*leafZ.begin()),
 								l, linkLength, thrust::raw_pointer_cast(&*segStartInd.begin())));
 			}
 
@@ -595,7 +595,7 @@ public:
 							thrust::raw_pointer_cast(&*childBB.begin()), i));
 			thrust::for_each(CountingIterator(0), CountingIterator(0)+numOfParticles,
 					 merge(thrust::raw_pointer_cast(&*nextp.begin()), thrust::raw_pointer_cast(&*D.begin()), thrust::raw_pointer_cast(&*childBB.begin()),
-					   thrust::raw_pointer_cast(&*inputX.begin()), thrust::raw_pointer_cast(&*inputY.begin()), thrust::raw_pointer_cast(&*inputZ.begin()),
+					   thrust::raw_pointer_cast(&*leafX.begin()), thrust::raw_pointer_cast(&*leafY.begin()), thrust::raw_pointer_cast(&*leafZ.begin()),
 					   thrust::raw_pointer_cast(&*subSegStartInd.begin()), linkLength));
 			}
 
@@ -722,15 +722,15 @@ public:
     // for a given node check whether it is within linking length in that axis
     struct setNodesWithinBoundary : public thrust::unary_function<int, void>
     {
-		float *inputX, *inputY, *inputZ;
+		float *leafX, *leafY, *leafZ;
 		int *childBB, *segStartInd;
 		float *splitValue;
 		int l;
 		float linkLength;
 
 		__host__ __device__
-		setNodesWithinBoundary(int *childBB, float *splitValue, float *inputX, float *inputY, float *inputZ, int l, float linkLength, int *segStartInd) :
-					   childBB(childBB), splitValue(splitValue), inputX(inputX), inputY(inputY), inputZ(inputZ), l(l), linkLength(linkLength), segStartInd(segStartInd) {}
+		setNodesWithinBoundary(int *childBB, float *splitValue, float *leafX, float *leafY, float *leafZ, int l, float linkLength, int *segStartInd) :
+					   childBB(childBB), splitValue(splitValue), leafX(leafX), leafY(leafY), leafZ(leafZ), l(l), linkLength(linkLength), segStartInd(segStartInd) {}
 
 		__host__ __device__
 		void operator()(int i)
@@ -740,9 +740,9 @@ public:
 				float sValue = splitValue[segStartInd[i]];
 
 				float dist;
-				if (l%3==0) dist = (inputX[i] - sValue);
-				else if (l%3==1) dist = (inputY[i] - sValue);
-				else if (l%3==2) dist = (inputZ[i] - sValue);
+				if (l%3==0) dist = (leafX[i] - sValue);
+				else if (l%3==1) dist = (leafY[i] - sValue);
+				else if (l%3==2) dist = (leafZ[i] - sValue);
 
 				if (dist < 0.0f) dist = -dist;
 
@@ -821,14 +821,14 @@ public:
     // merge two particles
     struct merge : public thrust::unary_function<int, void>
     {
-		float *inputX, *inputY, *inputZ;
+		float *leafX, *leafY, *leafZ;
 		int* nextp;
 		int *D, *childBB, *subSegStartInd;
 		float linkLength;
 
 		__host__ __device__
-		merge(int* nextp, int *D, int *childBB, float *inputX, float *inputY, float *inputZ, int *subSegStartInd, float linkLength) :
-			  nextp(nextp), D(D), childBB(childBB), inputX(inputX), inputY(inputY), inputZ(inputZ), subSegStartInd(subSegStartInd), linkLength(linkLength) {}
+		merge(int* nextp, int *D, int *childBB, float *leafX, float *leafY, float *leafZ, int *subSegStartInd, float linkLength) :
+			  nextp(nextp), D(D), childBB(childBB), leafX(leafX), leafY(leafY), leafZ(leafZ), subSegStartInd(subSegStartInd), linkLength(linkLength) {}
 
 		__host__ __device__
 		void operator()(int i)
@@ -839,9 +839,9 @@ public:
 				j = D[subSegStartInd[i]];
 
 				float xd, yd, zd;
-				xd = (inputX[i] - inputX[j]);  if (xd < 0.0f) xd = -xd;
-				yd = (inputY[i] - inputY[j]);  if (yd < 0.0f) yd = -yd;
-				zd = (inputZ[i] - inputZ[j]);  if (zd < 0.0f) zd = -zd;
+				xd = (leafX[i] - leafX[j]);  if (xd < 0.0f) xd = -xd;
+				yd = (leafY[i] - leafY[j]);  if (yd < 0.0f) yd = -yd;
+				zd = (leafZ[i] - leafZ[j]);  if (zd < 0.0f) zd = -zd;
 
 				if (xd<=linkLength && yd<=linkLength && zd<=linkLength)
 				{

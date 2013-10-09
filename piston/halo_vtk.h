@@ -118,9 +118,9 @@ protected:
 		if(size ==1) return;
 
 		thrust::device_vector<float> data;
-		if(dim == 0) data = inputX;
-		else if(dim == 1) data = inputY;
-		else if(dim == 2) data = inputZ;
+		if(dim == 0) data = leafX;
+		else if(dim == 1) data = leafY;
+		else if(dim == 2) data = leafZ;
 		
 		int half = (float)(size/2);
 
@@ -155,9 +155,9 @@ protected:
 			int ii = thrust::get<0>(firstKD[start]);
 			int jj = thrust::get<0>(firstKD[start+1]);
 			
-			boundsX[middle] = thrust::make_tuple(std::min(inputX[ii], inputX[jj]), std::max(inputX[ii], inputX[jj]));
-			boundsY[middle] = thrust::make_tuple(std::min(inputY[ii], inputY[jj]), std::max(inputY[ii], inputY[jj]));
-			boundsZ[middle] = thrust::make_tuple(std::min(inputZ[ii], inputZ[jj]), std::max(inputZ[ii], inputZ[jj]));
+			boundsX[middle] = thrust::make_tuple(std::min(leafX[ii], leafX[jj]), std::max(leafX[ii], leafX[jj]));
+			boundsY[middle] = thrust::make_tuple(std::min(leafY[ii], leafY[jj]), std::max(leafY[ii], leafY[jj]));
+			boundsZ[middle] = thrust::make_tuple(std::min(leafZ[ii], leafZ[jj]), std::max(leafZ[ii], leafZ[jj]));
 			
 			return;
 		}
@@ -168,9 +168,9 @@ protected:
 
 			int ii = thrust::get<0>(firstKD[start]);
 			
-			boundsX[middle] = thrust::make_tuple(std::min((float)inputX[ii], thrust::get<0>((BoundsTuple)boundsX[middle2])), std::max((float)inputX[ii], thrust::get<1>((BoundsTuple)boundsX[middle2])));
-			boundsY[middle] = thrust::make_tuple(std::min((float)inputY[ii], thrust::get<0>((BoundsTuple)boundsY[middle2])), std::max((float)inputY[ii], thrust::get<1>((BoundsTuple)boundsY[middle2])));
-			boundsZ[middle] = thrust::make_tuple(std::min((float)inputZ[ii], thrust::get<0>((BoundsTuple)boundsZ[middle2])), std::max((float)inputZ[ii], thrust::get<1>((BoundsTuple)boundsZ[middle2])));
+			boundsX[middle] = thrust::make_tuple(std::min((float)leafX[ii], thrust::get<0>((BoundsTuple)boundsX[middle2])), std::max((float)leafX[ii], thrust::get<1>((BoundsTuple)boundsX[middle2])));
+			boundsY[middle] = thrust::make_tuple(std::min((float)leafY[ii], thrust::get<0>((BoundsTuple)boundsY[middle2])), std::max((float)leafY[ii], thrust::get<1>((BoundsTuple)boundsY[middle2])));
+			boundsZ[middle] = thrust::make_tuple(std::min((float)leafZ[ii], thrust::get<0>((BoundsTuple)boundsZ[middle2])), std::max((float)leafZ[ii], thrust::get<1>((BoundsTuple)boundsZ[middle2])));
 									
 			return;
 		}
@@ -218,9 +218,9 @@ protected:
 										
 					if(haloIndex[ii] == haloIndex[jj]) continue;
 					
-					float xd = std::fabs(inputX[jj] - inputX[ii]);
-					float yd = std::fabs(inputY[jj] - inputY[ii]);
-					float zd = std::fabs(inputZ[jj] - inputZ[ii]);
+					float xd = std::fabs(leafX[jj] - leafX[ii]);
+					float yd = std::fabs(leafY[jj] - leafY[ii]);
+					float zd = std::fabs(leafZ[jj] - leafZ[ii]);
 
 					if (periodic)
 					{

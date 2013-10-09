@@ -35,7 +35,6 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 #include <QtGui>
 #include <QObject>
 
-
 #ifdef USE_INTEROP
 #include <cuda_gl_interop.h>
 #endif
@@ -191,25 +190,6 @@ struct tuple2float3 : public thrust::unary_function<Float3, float3>
   }
 };
 
-struct node2float3 : public thrust::unary_function<int, void>
-{
-	float       xscal;
-	halo::Node *nodes;
-	float3     *vertices;
-
-	__host__ __device__
-  node2float3(halo::Node *nodes, float3 *vertices, float xscal) : 
-		nodes(nodes), vertices(vertices), xscal(xscal) {}
-
-  __host__ __device__
-  void operator()(int i)
-  {
-		halo::Node n = nodes[i];
-
-		vertices[i] = make_float3((float) n.pos.x/xscal, (float) n.pos.y/xscal, (float) n.pos.z/xscal);
-  }
-};
-
 struct setColor
 {
 	int    *haloIndexInU;
@@ -306,9 +286,9 @@ void GLWindowHalo::paintGL()
 		vertices.resize(haloFinder->numOfParticles);
 	  colors.resize(haloFinder->numOfParticles);
 
-		thrust::for_each(CountingIterator(0), CountingIterator(0)+haloFinder->numOfParticles,
-				node2float3(thrust::raw_pointer_cast(&*haloFinder->nodes.begin()), 
-										thrust::raw_pointer_cast(&*vertices.begin()), xscal));
+    thrust::copy(thrust::make_transform_iterator(haloFinder->vertices_begin(), tuple2float3(xscal)),
+                 thrust::make_transform_iterator(haloFinder->vertices_end(),   tuple2float3(xscal)),
+                 vertices.begin());
 
     thrust::fill(colors.begin(), colors.end(), make_float4(1,0,0,1));
   }
