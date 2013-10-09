@@ -175,17 +175,17 @@ int main(int argc, char* argv[])
 
   //---------------------------- run different versions
 
-//  std::cout << "Naive result" << std::endl;
-//
-//  halo = new halo_naive(filename, format, n, np, rL);
-//  (*halo)(linkLength, particleSize);
-//  thrust::device_vector<int> a = halo->getHalos();
-//
-//  std::cout << "VTK based result (thrust version)" << std::endl;
-//
-//  halo = new halo_vtk(filename, format, n, np, rL);
-//  (*halo)(linkLength, particleSize);
-//  thrust::device_vector<int> b = halo->getHalos();
+  std::cout << "Naive result" << std::endl;
+
+  halo = new halo_naive(filename, format, n, np, rL);
+  (*halo)(linkLength, particleSize);
+  thrust::device_vector<int> a = halo->getHalos();
+
+  std::cout << "VTK based result (thrust version)" << std::endl;
+
+  halo = new halo_vtk(filename, format, n, np, rL);
+  (*halo)(linkLength, particleSize);
+  thrust::device_vector<int> b = halo->getHalos();
 
   std::cout << "Kdtree based result" << std::endl;
 
@@ -207,8 +207,8 @@ int main(int argc, char* argv[])
 
 //  compareResultsTxt((string)filename+"_Vtk.txt", halo->numOfParticles, d, "Vtk vs Mergetree");
 
-//	compareResults(a, c, halo->numOfParticles, "Naive vs Kdtree");
-//	compareResults(b, c, halo->numOfParticles, "Vtk (thrust version) vs Kdtree");
+	compareResults(a, c, halo->numOfParticles, "Naive vs Kdtree");
+	compareResults(b, c, halo->numOfParticles, "Vtk (thrust version) vs Kdtree");
 	compareResults(c, d, halo->numOfParticles, "Kdtree vs Mergetree");
 
 //	std::cout << "c "; thrust::copy(c.begin(), c.begin()+halo->numOfParticles, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;

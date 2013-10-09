@@ -762,35 +762,6 @@ public:
 		std::cout << std::endl << "----------------------" << std::endl << std::endl;
 	}
 	
-	// print merge tree details from device vectors
-	void outputMergeTreeDetails(std::string title)
-	{
-//		std::cout << title << std::endl << std::endl;
-//		std::cout << "MergeTreeNodes " << std::endl;
-//		for(int i=0; i<numOfParticles; i++)
-//		{
-//			Node n = ((Node)nodes[i]);
-//			int k  = (n.parent==NULL)?0:1;
-//			std::cout << "(" << n.pos.x << "," << n.pos.y << "," << n.pos.z << " : " << n.value << "," << n.nodeId << "," << n.haloId << "," << k << ")";
-//
-//			while(n.parent!=NULL)
-//			{
-//				n = *(n.parent);
-//				k = (n.parent==NULL)?0:1;
-//				std::cout << "(" << n.value << "," << n.nodeId << "," << n.haloId << "," << k << ")";
-//			}
-//
-//			n = ((Node)nodes[i]);
-//			if(n.parentSuper!=NULL)
-//			{
-//				n = *(n.parentSuper);
-//				std::cout << " - parentSuper (" << n.value << "," << n.nodeId << "," << n.haloId << ")";
-//			}
-//			std::cout << std::endl;
-//		}
-//		std::cout << std::endl << "----------------------" << std::endl << std::endl;
-	}
-
 
 
 	//------- METHOD : parallel for each cube, get the set of edges & create the submerge tree. Globally combine them
@@ -1363,10 +1334,6 @@ public:
 			cubesOld = cubes;
 			cubes = (int)std::ceil(((double)cubes/2));
 		}
-
-		#ifdef TEST
-			outputMergeTreeDetails("The sub merge trees.."); // output merge tree details
-		#endif
 	}
 
 	// combine free nodes lists of each cube at this iteration

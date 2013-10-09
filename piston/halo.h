@@ -136,8 +136,8 @@ public:
 
     getBounds();
 
-    haloIndex.resize(numOfParticles);
-    thrust::copy(CountingIterator(0), CountingIterator(0)+numOfParticles, haloIndex.begin());
+    //haloIndex.resize(numOfParticles);
+    //thrust::copy(CountingIterator(0), CountingIterator(0)+numOfParticles, haloIndex.begin());
 
     std::cout << "numOfParticles : " << numOfParticles << " \n";
   }
@@ -219,7 +219,7 @@ public:
 			leafZ_h[i] = fBlock[4];	leafVZ_h[i] = fBlock[5];
 			leafM_h[i] = fBlock[6];
 
-			leafI_h[i] = i; //iBlock[0];
+			leafI_h[i] = iBlock[0]; //i
 		}
 		myfile->close();
 
@@ -278,7 +278,7 @@ public:
 				return false;
 			}
 
-			iBlockTmp[0] = (int) iBlock[0]; //i;
+			iBlockTmp[0] = (int) iBlock[0];
 
 			// write to file
 		  outStream->write(reinterpret_cast<const char*>(fBlock), nfloat * sizeof(float));
@@ -353,8 +353,6 @@ public:
 		float fBlock[nfloat];
 		int   iBlock[nint];
 
-		int num = 0;
-
 		// Create one for output file
 		std::ofstream *outStream = new std::ofstream();
 		outStream->open((filename+".cosmo").c_str(), std::ios::out|std::ios::binary);
@@ -366,7 +364,7 @@ public:
 			int i = 0;
 			strtok((char*)line.c_str(), ",");		
 			while(++i<4) strtok (NULL, ",");
-			iBlock[0] = atoi(strtok(NULL, ",")); //num++;
+			iBlock[0] = atoi(strtok(NULL, ","));
 
 			while(++i<7) strtok (NULL, ",");
 			fBlock[0] = atof(strtok(NULL, ","));	fBlock[1] = 0;
