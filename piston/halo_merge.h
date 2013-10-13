@@ -437,10 +437,6 @@ public:
     thrust::exclusive_scan(tmpIntArray.begin(), tmpIntArray.end(), tmpIntArray.begin());
     thrust::transform(tmpIntArray.begin(), tmpIntArray.end(), tmpIntArray.begin(), add(start));
 
-//    for(int i=0; i<numOfParticles; i++)
-//      std::cout << tmpIntArray[i] << " ";
-//    std::cout << std::endl;
-
 	  // write feature details - .feature file (fId birth death parent) & .segmentation file (particlesIds)
 	  {
       std::ofstream *outStream2 = new std::ofstream();

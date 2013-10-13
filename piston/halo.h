@@ -136,9 +136,6 @@ public:
 
     getBounds();
 
-    //haloIndex.resize(numOfParticles);
-    //thrust::copy(CountingIterator(0), CountingIterator(0)+numOfParticles, haloIndex.begin());
-
     std::cout << "numOfParticles : " << numOfParticles << " \n";
   }
 

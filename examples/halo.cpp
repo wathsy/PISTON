@@ -147,6 +147,29 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
+	{
+	  thrust::device_vector<int> a,b,c;
+    a.resize(5); b.resize(5); c.resize(5);
+
+    a[0]=1; a[1]=1; a[2]=1; a[3]=1; a[4]=1;
+
+    thrust::exclusive_scan(a.begin(), a.end(), b.begin());
+    thrust::exclusive_scan(a.begin(), a.end(), c.begin(), 5);
+
+    std::cout << "a ";
+    for(int i=0; i<5; i++)
+      std::cout << a[i] << " ";
+    std::cout << std::endl;
+    std::cout << "b ";
+    for(int i=0; i<5; i++)
+      std::cout << b[i] << " ";
+    std::cout << std::endl;
+    std::cout << "c ";
+    for(int i=0; i<5; i++)
+      std::cout << c[i] << " ";
+    std::cout << std::endl;
+	}
+
   //---------------------------- set parameters
 
   halo *halo;
