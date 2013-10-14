@@ -73,10 +73,6 @@ public:
 
 			std::cout << "-- Cubes  " << numOfCubes << " : (" << cubesInX << "*" << cubesInY << "*" << cubesInZ << ") ... cubeLen " << cubeLen/xscal << std::endl;
 
-			#ifdef TEST
-				outputCubeDetails("init cube details"); // output cube details
-			#endif
-
 			//------- METHOD :
 	    // parallel for each cube, create the local merge tree & get the set of edges.
 			// globally combine the cubes, two cubes at a time by considering the edges
@@ -98,12 +94,10 @@ public:
 			clearSuperParents();
 			writeMergeTreeToFile(filename);
 
-			particleId.clear();	      particleSizeOfCubes.clear();  particleStartOfCubes.clear();
-			edgesSrc.clear();		      edgesDes.clear();  	          edgesWeight.clear();
-			edgeSizeOfCubes.clear();  edgeStartOfCubes.clear();
-			cubeId.clear();			      cubeMapping.clear();				  cubeMappingInv.clear();
-			tmpIntArray.clear();      tmpNxt.clear();							  tmpFree.clear();
-			sizeOfChunks.clear();     startOfChunks.clear();
+			particleId.clear();	particleSizeOfCubes.clear(); particleStartOfCubes.clear();
+			edgesSrc.clear();	 edgesDes.clear(); edgesWeight.clear(); edgeSizeOfCubes.clear(); edgeStartOfCubes.clear();
+			cubeId.clear();	 cubeMapping.clear(); cubeMappingInv.clear();
+			tmpIntArray.clear(); tmpNxt.clear(); tmpFree.clear(); sizeOfChunks.clear(); startOfChunks.clear();
 
 			std::cout << std::endl;
 			timersub(&mid1, &begin, &diff1);
@@ -374,12 +368,10 @@ public:
 	    int j = i;
 
 	    int count = 0;
-	    while(j!=-1 && leafValue[j]<=min_ll)
-	    { j = leafParent[j]; count++; }
+	    while(j!=-1 && leafValue[j]<=min_ll) { j = leafParent[j]; count++; }
 
       // if a node has more than one parent node with its value <= min_ll, the tree is invalid
-      if(count > 2)
-      { invalid = true;   std::cout << i << " " << count << std::endl; break; }
+      if(count > 2) { invalid = true;   std::cout << i << " " << count << std::endl; break; }
 	  }
     std::cout << std::endl;
 
@@ -404,7 +396,7 @@ public:
 	{
 	  float fBlock[4];
 
-	  // write particle details - pId x y z
+	  // write particle details - .particle file (pId x y z)
 	  {
       std::ofstream *outStream1 = new std::ofstream();
       outStream1->open((filename+".particle").c_str()); //std::ios::out|std::ios::binary
@@ -416,14 +408,12 @@ public:
         (*outStream1) << leafX[i] << " ";
         (*outStream1) << leafY[i] << " ";
         (*outStream1) << leafZ[i] << " ";
-        (*outStream1) << leafParent[i] << " ";
         (*outStream1) << "\n";
 
         //outStream1->write(reinterpret_cast<const char*>(fBlock), 4 * sizeof(float));
       }
       outStream1->close();
 	  }
-
 
 	  int start = 0;
     for(int i=0; i<numOfParticles; i++)
@@ -497,11 +487,7 @@ public:
             int j = children.front();
             children.pop();
 
-            if(leafValue[j]==0)
-            {
-              (*outStream3) << j << " ";
-              size++;
-            }
+            if(leafValue[j]==0) { (*outStream3) << j << " ";  size++; }
 
             int child = leafChildS[j];
             while(child!=-1)
@@ -557,6 +543,21 @@ public:
 	//------- init stuff
 	void initDetails()
 	{
+		initParticleIds();	// set particle ids
+		initNodeDetails();  // set node details
+		setNumberOfCubes();	// get total number of cubes
+	}
+
+  // set initial particle ids
+	void initParticleIds()
+	{
+		particleId.resize(numOfParticles);
+		thrust::sequence(particleId.begin(), particleId.end());
+	}
+
+	//set initial node details
+	void initNodeDetails()
+	{
 	  // resize node details
     leafX.resize(2*numOfParticles);
     leafY.resize(2*numOfParticles);
@@ -582,24 +583,14 @@ public:
     thrust::fill(leafChildE.begin(),  leafChildE.end(),  -1);
     thrust::fill(leafSibling.begin(), leafSibling.end(), -1);
     thrust::fill(leafI.begin()+numOfParticles, leafI.end(), -1);
-
-		initParticleIds();	// set particle ids
-		setNumberOfCubes();	// get total number of cubes
-	}
-
-  // set initial particle ids
-	void initParticleIds()
-	{
-		particleId.resize(numOfParticles);
-		thrust::sequence(particleId.begin(), particleId.end());
 	}
 
 	// get total number of cubes
 	void setNumberOfCubes()
 	{
-		cubesInX = (std::ceil((uBoundX - lBoundX)/cubeLen) == 0) ? 1 : std::ceil((uBoundX - lBoundX)/cubeLen);
-		cubesInY = (std::ceil((uBoundY - lBoundY)/cubeLen) == 0) ? 1 : std::ceil((uBoundY - lBoundY)/cubeLen);
-		cubesInZ = (std::ceil((uBoundZ - lBoundZ)/cubeLen) == 0) ? 1 : std::ceil((uBoundZ - lBoundZ)/cubeLen);
+		cubesInX = (std::ceil((uBoundX-lBoundX)/cubeLen) == 0) ? 1 : std::ceil((uBoundX-lBoundX)/cubeLen);
+		cubesInY = (std::ceil((uBoundY-lBoundY)/cubeLen) == 0) ? 1 : std::ceil((uBoundY-lBoundY)/cubeLen);
+		cubesInZ = (std::ceil((uBoundZ-lBoundZ)/cubeLen) == 0) ? 1 : std::ceil((uBoundZ-lBoundZ)/cubeLen);
 
 		numOfCubes = cubesInX*cubesInY*cubesInZ; // set number of cubes
 	}
@@ -617,6 +608,11 @@ public:
 	  gettimeofday(&mid2, 0);
 		getSizeAndStartOfCubes(); // for each cube, count its particles
 	  gettimeofday(&end, 0);
+
+    #ifdef TEST
+      outputCubeDetails("init cube details"); // output cube details
+    #endif
+
     std::cout << std::endl;
 	  std::cout << "'divideIntoCubes' Time division: " << std::endl << std::flush;
     timersub(&mid1, &begin, &diff0);
@@ -639,8 +635,7 @@ public:
                             thrust::raw_pointer_cast(&*leafY.begin()),
                             thrust::raw_pointer_cast(&*leafZ.begin()),
 														thrust::raw_pointer_cast(&*cubeId.begin()),
-														cubeLen, lBoundX, lBoundY, lBoundZ,
-														cubesInX, cubesInY, cubesInZ));
+														cubeLen, lBoundX, lBoundY, lBoundZ, cubesInX, cubesInY, cubesInZ));
 	}
 
 	// for a given particle, set its cube id
@@ -669,9 +664,9 @@ public:
 			int n = i;
 	
 			// get x,y,z coordinates for the cube
-			int z = (((leafZ[n]-lBoundZ) / cubeLen)>=cubesInZ) ? cubesInZ-1 : (leafZ[n]-lBoundZ) / cubeLen;
-			int y = (((leafY[n]-lBoundY) / cubeLen)>=cubesInY) ? cubesInY-1 : (leafY[n]-lBoundY) / cubeLen;
-			int x = (((leafX[n]-lBoundX) / cubeLen)>=cubesInX) ? cubesInX-1 : (leafX[n]-lBoundX) / cubeLen;
+			int z = (((leafZ[n]-lBoundZ)/cubeLen)>=cubesInZ) ? cubesInZ-1 : (leafZ[n]-lBoundZ)/cubeLen;
+			int y = (((leafY[n]-lBoundY)/cubeLen)>=cubesInY) ? cubesInY-1 : (leafY[n]-lBoundY)/cubeLen;
+			int x = (((leafX[n]-lBoundX)/cubeLen)>=cubesInX) ? cubesInX-1 : (leafX[n]-lBoundX)/cubeLen;
 			
 			cubeId[i] = (z*(cubesInX*cubesInY) + y*cubesInX + x); // get cube id
 		}
@@ -689,6 +684,7 @@ public:
     thrust::stable_sort_by_key(particleId.begin(), particleId.end(), cubeId.begin());
 	}
 
+//------------ TODO : implement in a better way
 	// for each cube, get the size & start of cube particles (in particleId array)
 	void getSizeAndStartOfCubes()
 	{
@@ -724,16 +720,13 @@ public:
 	{
 		std::cout << title << std::endl << std::endl;
 
-		std::cout << std::endl << "-- Outputs------------" << std::endl << std::endl;
-
 		std::cout << "-- Dim    (" << lBoundX << "," << lBoundY << "," << lBoundZ << "), (";
 		std::cout << uBoundX << "," << uBoundY << "," << uBoundZ << ")" << std::endl;
 		std::cout << "-- Cubes  " << numOfCubes << " : (" << cubesInX << "*" << cubesInY << "*" << cubesInZ << ")" << std::endl;
-
 		std::cout << std::endl << "----------------------" << std::endl << std::endl;
 
 		std::cout << "particleId 	"; thrust::copy(particleId.begin(), particleId.begin()+numOfParticles, std::ostream_iterator<int>(std::cout, " "));   std::cout << std::endl << std::endl;
-		std::cout << "cubeID		"; thrust::copy(cubeId.begin(), cubeId.begin()+numOfParticles, std::ostream_iterator<int>(std::cout, " "));   std::cout << std::endl << std::endl;
+		std::cout << "cubeID		"; thrust::copy(cubeId.begin(), cubeId.begin()+numOfParticles, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
 		std::cout << std::endl;
 		std::cout << "cubeMapping  "; thrust::copy(cubeMapping.begin(), cubeMapping.begin()+cubesNonEmpty, std::ostream_iterator<int>(std::cout, " "));   std::cout << std::endl << std::endl;
 		std::cout << "sizeOfCube	"; thrust::copy(particleSizeOfCubes.begin(), particleSizeOfCubes.begin()+cubesNonEmpty, std::ostream_iterator<int>(std::cout, " "));   std::cout << std::endl << std::endl;
@@ -745,6 +738,7 @@ public:
 	void outputEdgeDetails(std::string title)
 	{
 		std::cout << title << std::endl << std::endl;
+
 		std::cout << "numOfEdges			 " << numOfEdges << std::endl << std::endl;
 		std::cout << "edgeSizeOfCubes	 "; thrust::copy(edgeSizeOfCubes.begin(), edgeSizeOfCubes.begin()+cubesNonEmpty, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
 		std::cout << "edgeStartOfCubes "; thrust::copy(edgeStartOfCubes.begin(), edgeStartOfCubes.begin()+cubesNonEmpty, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
@@ -855,7 +849,6 @@ public:
 			int size  = particleSizeOfCubes[i];
 
 		  tmpNxt[i] = (size>0) ? start : -1;
-
 			tmpFree[start+size-1] = -1;
     }
  	};
@@ -901,7 +894,7 @@ public:
 			tmpFree[tmpNxt[i]] = -2;
 			tmpNxt[i] = tmpVal;
 
-			float x=0, y=0, z=0;
+			float x=0,  y=0,  z=0;
 			float vx=0, vy=0, vz=0;
 
 			int minHaloId = -1;
@@ -1021,7 +1014,7 @@ public:
 				if(cube_mapped==-1 || cube==-1 || particleSizeOfCubes[i]==0 || particleSizeOfCubes[cube]==0) continue;
 
 				edgeSizeOfCubes[i]++;  //sum the non empty neighbor cubes
-				tmpIntArray[i]	+= particleSizeOfCubes[cube]; // sum the number of particles in neighbor cubes
+				tmpIntArray[i] += particleSizeOfCubes[cube]; // sum the number of particles in neighbor cubes
 			}
 
 			tmpIntArray[i] *= particleSizeOfCubes[i]; // multiply by particles in this cube
@@ -1420,6 +1413,7 @@ public:
 				{
 				  int eSrc = edgesSrc[j];
 				  int eDes = edgesDes[j];
+
           float eWeight = edgesWeight[j];
 
 					if(!(cubeId[eSrc]>=cubeStartM && cubeId[eSrc]<=cubeEndM) ||
@@ -1561,9 +1555,9 @@ public:
             leafI[des] = -1;
             leafValue[des] = 0.0f;
             leafCount[des] = 0;
-            leafX[des] = 0;   leafVX[des] = 0;
-            leafY[des] = 0;   leafVX[des] = 0;
-            leafZ[des] = 0;   leafVX[des] = 0;
+            leafX[des] = 0; leafVX[des] = 0;
+            leafY[des] = 0; leafVX[des] = 0;
+            leafZ[des] = 0; leafVX[des] = 0;
             leafParent[des] = -1;
             leafChildS[des] = -1;
             leafChildE[des] = -1;
