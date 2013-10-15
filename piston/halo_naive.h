@@ -66,9 +66,8 @@ public:
 		}
 
 		gettimeofday(&mid, 0);
-
 		getUniqueHalos(particleSize); // get the unique valid halo ids
-
+		getHaloIdFromInput();
 		gettimeofday(&end, 0);
 
 		timersub(&mid, &begin, &diff1);

@@ -122,14 +122,14 @@ public:
 			leafZ = thrust::host_vector<float>(numOfParticles);
 			leafI = thrust::host_vector<float>(numOfParticles);
 
-			leafX[0] = 1.0;	leafY[0] = 1.0;	leafZ[0] = 0.0; leafI[0] = 0;
-			leafX[1] = 0.0;	leafY[1] = 4.0;	leafZ[1] = 0.0; leafI[1] = 1;
-			leafX[2] = 8.0;	leafY[2] = 3.0;	leafZ[2] = 0.0; leafI[2] = 2;
-			leafX[3] = 2.0;	leafY[3] = 6.0;	leafZ[3] = 0.0; leafI[3] = 3;
-			leafX[4] = 4.0;	leafY[4] = 2.0;	leafZ[4] = 0.0; leafI[4] = 4;
-			leafX[5] = 5.0;	leafY[5] = 5.0;	leafZ[5] = 0.0; leafI[5] = 5;
-			leafX[6] = 3.0;	leafY[6] = 4.0;	leafZ[6] = 0.0; leafI[6] = 6;
-			leafX[7] = 3.5;	leafY[7] = 4.5;	leafZ[7] = 0.0; leafI[7] = 7;
+			leafX[0] = 1.0;	leafY[0] = 1.0;	leafZ[0] = 0.0; leafI[0] = 7;
+			leafX[1] = 0.0;	leafY[1] = 4.0;	leafZ[1] = 0.0; leafI[1] = 6;
+			leafX[2] = 8.0;	leafY[2] = 3.0;	leafZ[2] = 0.0; leafI[2] = 5;
+			leafX[3] = 2.0;	leafY[3] = 6.0;	leafZ[3] = 0.0; leafI[3] = 4;
+			leafX[4] = 4.0;	leafY[4] = 2.0;	leafZ[4] = 0.0; leafI[4] = 3;
+			leafX[5] = 5.0;	leafY[5] = 5.0;	leafZ[5] = 0.0; leafI[5] = 2;
+			leafX[6] = 3.0;	leafY[6] = 4.0;	leafZ[6] = 0.0; leafI[6] = 1;
+			leafX[7] = 3.5;	leafY[7] = 4.5;	leafZ[7] = 0.0; leafI[7] = 0;
 
 			std::cout << "Test data loaded \n";
     }
@@ -216,7 +216,7 @@ public:
 			leafZ_h[i] = fBlock[4];	leafVZ_h[i] = fBlock[5];
 			leafM_h[i] = fBlock[6];
 
-			leafI_h[i] = iBlock[0]; //i
+			leafI_h[i] = iBlock[0];
 		}
 		myfile->close();
 
@@ -687,6 +687,46 @@ public:
 
     haloUnique.clear(); haloSize.clear(); a.clear(); b.clear();
   }
+
+  // get the halo ids from the input particle ids
+  void getHaloIdFromInput()
+  {
+    thrust::device_vector<int> tmp; tmp.resize(numOfParticles);
+    thrust::fill(tmp.begin(), tmp.end(), -1);
+    for(int i=0; i<numOfHalos; i++)
+    {
+      int ind = haloIndexUnique[i];   int indNew = -1;
+      for(int j=0; j<numOfParticles; j++)
+      {
+        if(haloIndex[j]==ind)
+          indNew = (indNew==-1) ? leafI[j] : ((leafI[j]<indNew)?leafI[j]:indNew);
+      }
+
+      thrust::for_each(CountingIterator(0), CountingIterator(0)+numOfParticles,
+          checkId(thrust::raw_pointer_cast(&*haloIndex.begin()),
+                  thrust::raw_pointer_cast(&*tmp.begin()),
+                  ind, indNew));
+    }
+    thrust::copy(tmp.begin(), tmp.end(), haloIndex.begin());
+  }
+
+  // check whether if of a certain item in haloIndex equals ind given
+  struct checkId
+  {
+    int *haloIndex, *tmp;
+    int ind, indNew;
+
+    __host__ __device__
+    checkId(int *haloIndex, int *tmp, int ind, int indNew) :
+      haloIndex(haloIndex), tmp(tmp), ind(ind), indNew(indNew) {}
+
+    __host__ __device__
+    void operator()(int i)
+    {
+      if(haloIndex[i]==ind)
+        tmp[i] = indNew;
+    }
+  };
 
   // check whether number of particles in this halo exceed particleSize
   struct validHalo

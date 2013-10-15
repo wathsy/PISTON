@@ -94,9 +94,8 @@ public:
 		std::cout << "Time elapsed: " << seconds << " s for merging"<< std::endl;
 
 		gettimeofday(&begin, 0);
-
 		getUniqueHalos(particleSize); // get the unique valid halo ids
-
+		getHaloIdFromInput();
 		gettimeofday(&end, 0);
 
 		timersub(&end, &begin, &diff);

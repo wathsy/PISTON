@@ -424,8 +424,7 @@ public:
         checkIfNode(thrust::raw_pointer_cast(&*leafI.begin()),
                     thrust::raw_pointer_cast(&*tmpIntArray.begin()),
                     numOfParticles));
-    thrust::exclusive_scan(tmpIntArray.begin(), tmpIntArray.end(), tmpIntArray.begin());
-    thrust::transform(tmpIntArray.begin(), tmpIntArray.end(), tmpIntArray.begin(), add(start));
+    thrust::exclusive_scan(tmpIntArray.begin(), tmpIntArray.end(), tmpIntArray.begin(), start);
 
 	  // write feature details - .feature file (fId birth death parent) & .segmentation file (particlesIds)
 	  {
@@ -443,27 +442,25 @@ public:
         int size = 0;
         if(leafParent[i]==-1)
         {
+          size++;
           (*outStream2) << offset << " ";
           (*outStream2) << min_ll/xscal << " ";
           (*outStream2) << max_ll/xscal << " ";
           (*outStream2) << -1 << " ";
+          (*outStream2) << offset << " " << size << "\n";
 
           (*outStream3) << offset << " ";
-          size++;
-
-          (*outStream2) << offset << " " << size << "\n";
         }
         else if(leafValue[leafParent[i]]>min_ll)
         {
+          size++;
           (*outStream2) << offset << " ";
           (*outStream2) << min_ll/xscal << " ";
           (*outStream2) << leafValue[leafParent[i]]/xscal << " ";
           (*outStream2) << tmpIntArray[leafParent[i]-numOfParticles] << " ";
+          (*outStream2) << offset << " " << size << "\n";
 
           (*outStream3) << offset << " ";
-          size++;
-
-          (*outStream2) << offset << " " << size << "\n";
         }
         offset += size;
       }
@@ -520,21 +517,6 @@ public:
     void operator()(int i)
     {
       tmp[i] = (leafI[numOfParticles+i]==-1) ? 0 : 1;
-    }
-  };
-
-  // for each item add n
-  struct add : public thrust::unary_function<int, void>
-  {
-    int n;
-
-    __host__ __device__
-    add(int n) : n(n) {}
-
-    __host__ __device__
-    int operator()(int i)
-    {
-      return i+n;
     }
   };
 

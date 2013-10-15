@@ -1,14 +1,10 @@
 
 using namespace std;
 
-//-------
-
 #include <piston/halo_naive.h>
 #include <piston/halo_kd.h>
 #include <piston/halo_vtk.h>
 #include <piston/halo_merge.h>
-
-//-------
 
 #include <sys/time.h>
 #include <stdio.h>
@@ -147,29 +143,6 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	{
-	  thrust::device_vector<int> a,b,c;
-    a.resize(5); b.resize(5); c.resize(5);
-
-    a[0]=1; a[1]=1; a[2]=1; a[3]=1; a[4]=1;
-
-    thrust::exclusive_scan(a.begin(), a.end(), b.begin());
-    thrust::exclusive_scan(a.begin(), a.end(), c.begin(), 5);
-
-    std::cout << "a ";
-    for(int i=0; i<5; i++)
-      std::cout << a[i] << " ";
-    std::cout << std::endl;
-    std::cout << "b ";
-    for(int i=0; i<5; i++)
-      std::cout << b[i] << " ";
-    std::cout << std::endl;
-    std::cout << "c ";
-    for(int i=0; i<5; i++)
-      std::cout << c[i] << " ";
-    std::cout << std::endl;
-	}
-
   //---------------------------- set parameters
 
   halo *halo;
@@ -234,6 +207,8 @@ int main(int argc, char* argv[])
 	compareResults(b, c, halo->numOfParticles, "Vtk (thrust version) vs Kdtree");
 	compareResults(c, d, halo->numOfParticles, "Kdtree vs Mergetree");
 
+//  std::cout << "a "; thrust::copy(a.begin(), a.begin()+halo->numOfParticles, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
+//  std::cout << "b "; thrust::copy(b.begin(), b.begin()+halo->numOfParticles, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
 //	std::cout << "c "; thrust::copy(c.begin(), c.begin()+halo->numOfParticles, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
 //	std::cout << "d "; thrust::copy(d.begin(), d.begin()+halo->numOfParticles, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
 

@@ -107,7 +107,7 @@ public:
       clear();
 
       linkLength   = linkLength*xscal;
-      particleSize  = particleSize;
+      particleSize = particleSize;
 
       // no valid particles, return
       if(numOfParticles==0) return;
@@ -139,6 +139,7 @@ public:
 
       gettimeofday(&mid, 0);
       getUniqueHalos(particleSize); // get the unique valid halo ids
+      getHaloIdFromInput();
       gettimeofday(&end, 0);
 
       timersub(&mid, &begin, &diff1);
@@ -155,6 +156,7 @@ public:
       std::cout << "Number of Particles : " << numOfParticles <<  " Number of Halos found : " << numOfHalos << std::endl << std::endl;
     }
 
+
     struct setCorrectHaloId
     {
     	int* haloIndex;
@@ -168,10 +170,10 @@ public:
 			__host__ __device__
 			void operator()(int j)
 			{
-				if(haloIndex[j] == n)
-					tmp[j] = i;
+				if(haloIndex[j]==n) tmp[j] = i;
 			}
     };
+
 
     // build the b-Kdtree & split the data
     void getBalancedKdTree()
