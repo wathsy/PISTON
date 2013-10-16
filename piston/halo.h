@@ -289,7 +289,7 @@ public:
       std::ifstream *myfile = new std::ifstream(filename.c_str(), std::ios::in);
       if (!myfile->is_open()) { std::cout << "File: " << filename << "." << format << " cannot be opened \n"; return false; }
 
-      std::map<int,int> vec;
+      std::map<int,float> vec;
 
       std::string line;
       if (myfile->is_open())
@@ -313,11 +313,11 @@ public:
           iss >> sub; vx = atof(sub.c_str()); iss >> sub; vy = atof(sub.c_str()); iss >> sub; vz = atof(sub.c_str());
           iss >> sub; id = atoi(sub.c_str()); iss >> sub; fof_halo_tag = atoi(sub.c_str());
 
-          std::map<int,int>::iterator tIt = vec.find(id);
+          std::map<int,float>::iterator tIt = vec.find(id);
           if(tIt == vec.end())
-            vec.insert(std::map<int,int>::value_type(id,fof_halo_tag));
+            vec.insert(std::map<int,float>::value_type(id,x));
           else
-            std::cout << (tIt->first) << " " << id << " - " << (tIt->second) << " " << fof_halo_tag << std::endl;
+            std::cout << (tIt->first) << " " << id << " - " << (tIt->second) << " " << x << std::endl;
         }
 
         std::cout << count-vec.size() << " out of " << count << " is duplicate. Rest is " << vec.size() << std::endl;
