@@ -75,14 +75,10 @@ public:
 
 	thrust::device_vector<int>    haloIndex; // halo indices for each particle
 
-	// stores all node details of the merge tree
+	// stores all leaf details of the merge tree (of the particles)
   thrust::device_vector<int>    leafI, leafM;							// index & mass for each leaf
   thrust::device_vector<float>  leafX, leafY, leafZ;	    // positions for each leaf
   thrust::device_vector<float>  leafVX, leafVY, leafVZ;	  // velocities for each leaf
-  thrust::device_vector<float>  leafValue;                // value for each leaf
-  thrust::device_vector<int>    leafCount;                // count for each leaf
-  thrust::device_vector<int>    leafParent, leafParentS;
-  thrust::device_vector<int>    leafChildS, leafChildE, leafSibling;
 
 	// stores stats of each halos
   thrust::device_vector<int>    haloIndexUnique;            					 // unique halo indexes
@@ -117,19 +113,22 @@ public:
 //			generateNonUniformData(); // generate nearby points to real data
 
 			numOfParticles = 8;
-			leafX = thrust::host_vector<float>(numOfParticles);
-			leafY = thrust::host_vector<float>(numOfParticles);
-			leafZ = thrust::host_vector<float>(numOfParticles);
-			leafI = thrust::host_vector<float>(numOfParticles);
+			leafX  = thrust::host_vector<float>(numOfParticles);
+			leafY  = thrust::host_vector<float>(numOfParticles);
+			leafZ  = thrust::host_vector<float>(numOfParticles);
+			leafVX = thrust::host_vector<float>(numOfParticles);
+      leafVY = thrust::host_vector<float>(numOfParticles);
+      leafVZ = thrust::host_vector<float>(numOfParticles);
+			leafI  = thrust::host_vector<float>(numOfParticles);
 
-			leafX[0] = 1.0;	leafY[0] = 1.0;	leafZ[0] = 0.0; leafI[0] = 7;
-			leafX[1] = 0.0;	leafY[1] = 4.0;	leafZ[1] = 0.0; leafI[1] = 6;
-			leafX[2] = 8.0;	leafY[2] = 3.0;	leafZ[2] = 0.0; leafI[2] = 5;
-			leafX[3] = 2.0;	leafY[3] = 6.0;	leafZ[3] = 0.0; leafI[3] = 4;
-			leafX[4] = 4.0;	leafY[4] = 2.0;	leafZ[4] = 0.0; leafI[4] = 3;
-			leafX[5] = 5.0;	leafY[5] = 5.0;	leafZ[5] = 0.0; leafI[5] = 2;
-			leafX[6] = 3.0;	leafY[6] = 4.0;	leafZ[6] = 0.0; leafI[6] = 1;
-			leafX[7] = 3.5;	leafY[7] = 4.5;	leafZ[7] = 0.0; leafI[7] = 0;
+			leafX[0] = 1.0;	leafY[0] = 1.0;	leafZ[0] = 0.0; leafVX[0] = 0.0; leafVY[0] = 0.0; leafVZ[0] = 0.0; leafI[0] = 7;
+			leafX[1] = 0.0;	leafY[1] = 4.0;	leafZ[1] = 0.0; leafVX[1] = 0.0; leafVY[1] = 0.0; leafVZ[1] = 0.0; leafI[1] = 6;
+			leafX[2] = 8.0;	leafY[2] = 3.0;	leafZ[2] = 0.0; leafVX[2] = 0.0; leafVY[2] = 0.0; leafVZ[2] = 0.0; leafI[2] = 5;
+			leafX[3] = 2.0;	leafY[3] = 6.0;	leafZ[3] = 0.0; leafVX[3] = 0.0; leafVY[3] = 0.0; leafVZ[3] = 0.0; leafI[3] = 4;
+			leafX[4] = 4.0;	leafY[4] = 2.0;	leafZ[4] = 0.0; leafVX[4] = 0.0; leafVY[4] = 0.0; leafVZ[4] = 0.0; leafI[4] = 3;
+			leafX[5] = 5.0;	leafY[5] = 5.0;	leafZ[5] = 0.0; leafVX[5] = 0.0; leafVY[5] = 0.0; leafVZ[5] = 0.0; leafI[5] = 2;
+			leafX[6] = 3.0;	leafY[6] = 4.0;	leafZ[6] = 0.0; leafVX[6] = 0.0; leafVY[6] = 0.0; leafVZ[6] = 0.0; leafI[6] = 1;
+			leafX[7] = 3.5;	leafY[7] = 4.5;	leafZ[7] = 0.0; leafVX[7] = 0.0; leafVY[7] = 0.0; leafVZ[7] = 0.0; leafI[7] = 0;
 
 			std::cout << "Test data loaded \n";
     }

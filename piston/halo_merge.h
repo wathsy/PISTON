@@ -46,6 +46,18 @@ public:
 	thrust::device_vector<int>   tmpIntArray;	// temperary arrays used
 	thrust::device_vector<int>   tmpNxt, tmpFree;  // stores details of free items in merge tree
 
+	// rest of the details for leafs
+  thrust::device_vector<int>    leafParent, leafParentS, leafSibling;
+
+  // stores all node details of the merge tree
+  thrust::device_vector<int>    nodeI, nodeM;             // index & mass for each node
+  thrust::device_vector<float>  nodeX, nodeY, nodeZ;      // positions for each node
+  thrust::device_vector<float>  nodeVX, nodeVY, nodeVZ;   // velocities for each node
+  thrust::device_vector<float>  nodeValue;
+  thrust::device_vector<int>    nodeCount;
+  thrust::device_vector<int>    nodeParent;
+  thrust::device_vector<int>    nodeChildS, nodeChildE, nodeSibling;
+
 	halo_merge(float min_linkLength, float max_linkLength, std::string filename="", std::string format=".cosmo", int n = 1, int np=1, float rL=-1) : halo(filename, format, n, np, rL)
 	{
 		if(numOfParticles!=0)
@@ -91,7 +103,6 @@ public:
 
 			checkValidMergeTree();
 			getSizeOfMergeTree();
-			clearSuperParents();
 			writeMergeTreeToFile(filename);
 
 			particleId.clear();	particleSizeOfCubes.clear(); particleStartOfCubes.clear();
@@ -144,7 +155,7 @@ public:
 
 		std::cout << "Number of Particles   : " << numOfParticles << std::endl;
 		std::cout << "Number of Halos found : " << numOfHalos << std::endl;
-		std::cout << "Merge tree size : " << mergetreeSize << " (leafs-" << numOfParticles << " other-" << mergetreeSize-numOfParticles << ")" << std::endl;
+		std::cout << "Merge tree size : " << mergetreeSize << std::endl;
     std::cout << "Min_ll  : " << min_ll/xscal  << std::endl;
     std::cout << "Max_ll  : " << max_ll/xscal << std::endl << std::endl;
 		std::cout << "-----------------------------" << std::endl << std::endl;
@@ -154,47 +165,50 @@ public:
 	void findHalos(float linkLength, int particleSize)
 	{
 		thrust::for_each(CountingIterator(0), CountingIterator(0)+numOfParticles,
-				setHaloId(thrust::raw_pointer_cast(&*leafValue.begin()),
-				          thrust::raw_pointer_cast(&*leafCount.begin()),
-				          thrust::raw_pointer_cast(&*leafI.begin()),
-				          thrust::raw_pointer_cast(&*leafParent.begin()),
+				setHaloId(thrust::raw_pointer_cast(&*leafParent.begin()),
 				          thrust::raw_pointer_cast(&*leafParentS.begin()),
+				          thrust::raw_pointer_cast(&*nodeValue.begin()),
+				          thrust::raw_pointer_cast(&*nodeCount.begin()),
+				          thrust::raw_pointer_cast(&*nodeI.begin()),
+				          thrust::raw_pointer_cast(&*nodeParent.begin()),
 						 		  thrust::raw_pointer_cast(&*haloIndex.begin()),
 						     	linkLength, particleSize));
 	}
 
-	// for a given node set its halo id, for particles in filtered halos set id to -1
+	// for a given node set its halo id, for pa 0 6 4 rticles in filtered halos set id to -1
 	struct setHaloId : public thrust::unary_function<int, void>
 	{
-		float *leafValue;
-		int   *leafCount, *leafI, *leafParent, *leafParentS;
+	  int *leafParent, *leafParentS;
+
+		float *nodeValue;
+		int   *nodeCount, *nodeI, *nodeParent;
 		int   *haloIndex;
 
 		int    particleSize;
 		float  linkLength;
 
 		__host__ __device__
-		setHaloId(float *leafValue, int *leafCount, int *leafI,
-		  int *leafParent, int *leafParentS,
+		setHaloId(int *leafParent, int *leafParentS,
+		  float *nodeValue, int *nodeCount, int *nodeI, int *nodeParent,
 		  int *haloIndex, float linkLength, int particleSize) :
-		  leafValue(leafValue), leafCount(leafCount), leafI(leafI),
 		  leafParent(leafParent), leafParentS(leafParentS),
+		  nodeValue(nodeValue), nodeCount(nodeCount), nodeI(nodeI), nodeParent(nodeParent),
 		  haloIndex(haloIndex), linkLength(linkLength), particleSize(particleSize) {}
 
 		__host__ __device__
 		void operator()(int i)
 		{			
-		  int n = i;
+		  int n = leafParent[i];
 
-		  if(leafParentS[n]!=-1 && leafValue[leafParentS[n]]<=linkLength)
-		    n = leafParentS[n];
+		  if(leafParentS[i]!=-1 && nodeValue[leafParentS[i]]<=linkLength)
+		    n = leafParentS[i];
 
-		  while(leafParent[n]!=-1 && leafValue[leafParent[n]]<=linkLength)
-        n = leafParent[n];
+		  while(nodeParent[n]!=-1 && nodeValue[nodeParent[n]]<=linkLength)
+        n = nodeParent[n];
 
 		  leafParentS[i] = n;
 
-		  haloIndex[i] = (leafCount[n] >= particleSize) ? leafI[n] : -1;
+		  haloIndex[i] = (nodeCount[n] >= particleSize) ? nodeI[n] : -1;
 		}
 	};
 
@@ -227,65 +241,59 @@ public:
 		haloVZ.resize(numOfHalos);
 
 		thrust:: for_each(CountingIterator(0), CountingIterator(0)+numOfHalos,
-				setHaloStats(thrust::raw_pointer_cast(&*leafCount.begin()),
-                     thrust::raw_pointer_cast(&*leafX.begin()),
-                     thrust::raw_pointer_cast(&*leafY.begin()),
-                     thrust::raw_pointer_cast(&*leafZ.begin()),
-                     thrust::raw_pointer_cast(&*leafVX.begin()),
-                     thrust::raw_pointer_cast(&*leafVY.begin()),
-                     thrust::raw_pointer_cast(&*leafVZ.begin()),
-                     thrust::raw_pointer_cast(&*leafParentS.begin()),
-										 thrust::raw_pointer_cast(&*tmpIntArray.begin()),
+				setHaloStats(thrust::raw_pointer_cast(&*leafParentS.begin()),
+				             thrust::raw_pointer_cast(&*nodeCount.begin()),
+                     thrust::raw_pointer_cast(&*nodeX.begin()),
+                     thrust::raw_pointer_cast(&*nodeY.begin()),
+                     thrust::raw_pointer_cast(&*nodeZ.begin()),
+                     thrust::raw_pointer_cast(&*nodeVX.begin()),
+                     thrust::raw_pointer_cast(&*nodeVY.begin()),
+                     thrust::raw_pointer_cast(&*nodeVZ.begin()),
+                     thrust::raw_pointer_cast(&*tmpIntArray.begin()),
 										 thrust::raw_pointer_cast(&*haloCount.begin()),
 										 thrust::raw_pointer_cast(&*haloX.begin()),
 										 thrust::raw_pointer_cast(&*haloY.begin()),
 										 thrust::raw_pointer_cast(&*haloZ.begin()),
 										 thrust::raw_pointer_cast(&*haloVX.begin()),
 										 thrust::raw_pointer_cast(&*haloVY.begin()),
-										 thrust::raw_pointer_cast(&*haloVZ.begin()),
-										 linkLength, particleSize));
+										 thrust::raw_pointer_cast(&*haloVZ.begin())));
 	}
 
 	// for each halo, get its stats
 	struct setHaloStats : public thrust::unary_function<int, void>
 	{
-	  int *leafCount, *leafParentS;
-    float *leafX, *leafY, *leafZ;
-    float *leafVX, *leafVY, *leafVZ;
+	  int *nodeCount, *leafParentS;
+    float *nodeX, *nodeY, *nodeZ;
+    float *nodeVX, *nodeVY, *nodeVZ;
 		
-		int    particleSize;
-		float  linkLength;
-
 		int *particleId;
 		int *haloCount;
 		float *haloX, *haloY, *haloZ;
 		float *haloVX, *haloVY, *haloVZ;
 
 		__host__ __device__
-		setHaloStats(int *leafCount,
-      float *leafX, float *leafY, float *leafZ,
-      float *leafVX, float *leafVY, float *leafVZ,
-      int *leafParentS, int *particleId, int *haloCount,
-			float *haloX, float *haloY, float *haloZ,
-			float *haloVX, float *haloVY, float *haloVZ,
-			float linkLength, int particleSize) :
-			leafCount(leafCount),
-      leafX(leafX), leafY(leafY), leafZ(leafZ),
-      leafVX(leafVX), leafVY(leafVY), leafVZ(leafVZ),
-			leafParentS(leafParentS), particleId(particleId), haloCount(haloCount),
+		setHaloStats(int *leafParentS, int *nodeCount,
+      float *nodeX, float *nodeY, float *nodeZ,
+      float *nodeVX, float *nodeVY, float *nodeVZ,
+      int *particleId, int *haloCount,
+      float *haloX, float *haloY, float *haloZ,
+      float *haloVX, float *haloVY, float *haloVZ) :
+			leafParentS(leafParentS), nodeCount(nodeCount),
+      nodeX(nodeX), nodeY(nodeY), nodeZ(nodeZ),
+      nodeVX(nodeVX), nodeVY(nodeVY), nodeVZ(nodeVZ),
+			particleId(particleId), haloCount(haloCount),
 			haloX(haloX), haloY(haloY), haloZ(haloZ),
-			haloVX(haloVX), haloVY(haloVY), haloVZ(haloVZ),
-			linkLength(linkLength), particleSize(particleSize) {}
+			haloVX(haloVX), haloVY(haloVY), haloVZ(haloVZ) {}
 
 		__host__ __device__
 		void operator()(int i)
 		{			
 		  int n = leafParentS[particleId[i]];
 
-			haloCount[i] = leafCount[n];
-			haloX[i] = (float)(leafX[n]/leafCount[n]);	haloVX[i] = (float)(leafVX[n]/leafCount[n]);
-			haloY[i] = (float)(leafY[n]/leafCount[n]);	haloVY[i] = (float)(leafVY[n]/leafCount[n]);
-			haloZ[i] = (float)(leafZ[n]/leafCount[n]);	haloVZ[i] = (float)(leafVZ[n]/leafCount[n]);
+			haloCount[i] = nodeCount[n];
+			haloX[i] = (float)(nodeX[n]/nodeCount[n]);	haloVX[i] = (float)(nodeVX[n]/nodeCount[n]);
+			haloY[i] = (float)(nodeY[n]/nodeCount[n]);	haloVY[i] = (float)(nodeVY[n]/nodeCount[n]);
+			haloZ[i] = (float)(nodeZ[n]/nodeCount[n]);	haloVZ[i] = (float)(nodeVZ[n]/nodeCount[n]);
 		}
 	};
 
@@ -309,7 +317,7 @@ public:
 
 		thrust::gather(tmpIntArray.begin(), tmpIntArray.begin()+numOfHaloParticles, haloIndex.begin(), haloIndex_f.begin());
 		
-		thrust:: for_each(CountingIterator(0), CountingIterator(0)+numOfHaloParticles,
+		thrust::for_each(CountingIterator(0), CountingIterator(0)+numOfHaloParticles,
 			getHaloParticlePositions(thrust::raw_pointer_cast(&*leafX.begin()),
                                thrust::raw_pointer_cast(&*leafY.begin()),
                                thrust::raw_pointer_cast(&*leafZ.begin()),
@@ -362,44 +370,63 @@ public:
 	// check whether the merge tree is valid or not
 	void checkValidMergeTree()
 	{
-	  bool invalid = false;
-	  for(int i=0; i<numOfParticles; i++)
-	  {
-	    int j = i;
+	  tmpIntArray.resize(numOfParticles);
+	  thrust::for_each(CountingIterator(0), CountingIterator(0)+numOfParticles,
+	        checkValid(thrust::raw_pointer_cast(&*tmpIntArray.begin()),
+	                   thrust::raw_pointer_cast(&*leafParent.begin()),
+	                   thrust::raw_pointer_cast(&*nodeParent.begin()),
+	                   thrust::raw_pointer_cast(&*nodeValue.begin()),
+	                   min_ll));
 
-	    int count = 0;
-	    while(j!=-1 && leafValue[j]<=min_ll) { j = leafParent[j]; count++; }
+	  int result = thrust::reduce(tmpIntArray.begin(), tmpIntArray.end());
 
-      // if a node has more than one parent node with its value <= min_ll, the tree is invalid
-      if(count > 2) { invalid = true;   std::cout << i << " " << count << std::endl; break; }
-	  }
-    std::cout << std::endl;
-
-    if(invalid) std::cout << "-- ERROR: invalid merge tree " << std::endl;
+    if(result!=0) std::cout << "-- ERROR: invalid merge tree " << std::endl;
     else std::cout << "-- valid merge tree " << std::endl;
 	}
+
+	// check whether a leafs parent nodes are valid
+  struct checkValid : public thrust::unary_function<int, void>
+  {
+    double min_ll;
+    int *tmpIntArray;
+
+    int *leafParent, *nodeParent;
+    float *nodeValue;
+
+    __host__ __device__
+    checkValid(int *tmpIntArray, int *leafParent, int *nodeParent, float *nodeValue, double min_ll) :
+      tmpIntArray(tmpIntArray), leafParent(leafParent),
+      nodeParent(nodeParent), nodeValue(nodeValue), min_ll(min_ll) {}
+
+    __host__ __device__
+    bool operator()(int i)
+    {
+      int tmp = leafParent[i];
+
+      bool valid = (nodeValue[tmp]==min_ll);
+      if(nodeParent[tmp]!=-1)
+        valid &= (nodeValue[nodeParent[tmp]]>min_ll);
+
+      tmpIntArray[i] = (valid) ? 0 : 1;
+    }
+  };
 
 	// get the size of the merge tree
 	void getSizeOfMergeTree()
 	{
-	  mergetreeSize = numOfParticles + (numOfParticles - thrust::count(leafI.begin()+numOfParticles, leafI.end(), -1));
-	}
-
-	// clear super parents of all node
-	void clearSuperParents()
-	{
-		thrust::fill(leafParentS.begin(), leafParentS.end(), -1);
+	  mergetreeSize = thrust::count(nodeI.begin(), nodeI.end(), -1);
 	}
 
 	//write merge tree to a file
 	void writeMergeTreeToFile(std::string filename)
 	{
-	  float fBlock[4];
-
 	  // write particle details - .particle file (pId x y z)
 	  {
       std::ofstream *outStream1 = new std::ofstream();
       outStream1->open((filename+".particle").c_str()); //std::ios::out|std::ios::binary
+      (*outStream1) << "#pId x y z \n";
+
+      float fBlock[4];
       for(int i=0; i<numOfParticles; i++)
       {
         fBlock[0] = i;   fBlock[1] = leafX[i];   fBlock[2] = leafY[i];   fBlock[3] = leafZ[i];
@@ -407,98 +434,73 @@ public:
         (*outStream1) << i << " ";
         (*outStream1) << leafX[i] << " ";
         (*outStream1) << leafY[i] << " ";
-        (*outStream1) << leafZ[i] << " ";
-        (*outStream1) << "\n";
+        (*outStream1) << leafZ[i] << "\n";
 
         //outStream1->write(reinterpret_cast<const char*>(fBlock), 4 * sizeof(float));
       }
       outStream1->close();
 	  }
 
-	  int start = 0;
-    for(int i=0; i<numOfParticles; i++)
-      if(leafParent[i]==-1 || leafValue[leafParent[i]]>min_ll) start++;
+	  // count the valid nodes in the tree
+    tmpIntArray.resize(2*cubes);
+    thrust::for_each(CountingIterator(0), CountingIterator(0)+2*cubes,
+        checkIfNode(thrust::raw_pointer_cast(&*nodeI.begin()),
+                    thrust::raw_pointer_cast(&*tmpIntArray.begin())));
+    thrust::exclusive_scan(tmpIntArray.begin(), tmpIntArray.end(), tmpIntArray.begin(), 0);
 
-    tmpIntArray.resize(numOfParticles);
-    thrust::for_each(CountingIterator(0), CountingIterator(0)+numOfParticles,
-        checkIfNode(thrust::raw_pointer_cast(&*leafI.begin()),
-                    thrust::raw_pointer_cast(&*tmpIntArray.begin()),
-                    numOfParticles));
-    thrust::exclusive_scan(tmpIntArray.begin(), tmpIntArray.end(), tmpIntArray.begin(), start);
-
-	  // write feature details - .feature file (fId birth death parent) & .segmentation file (particlesIds)
+	  // write feature details - .feature file (fId birth death parent offset size volume)
 	  {
       std::ofstream *outStream2 = new std::ofstream();
       outStream2->open((filename+".feature").c_str());
-
-      std::ofstream *outStream3 = new std::ofstream();
-      outStream3->open((filename+".segmentation").c_str());
+      (*outStream2) << "#fId birth death parent offset size volume \n";
 
       int offset = 0;
-
-	    //first write the features with just one particle
-      for(int i=0; i<numOfParticles; i++)
+      for(int i=0; i<2*cubes; i++)
       {
-        int size = 0;
-        if(leafParent[i]==-1)
+        if(nodeI[i]!=-1)
         {
-          size++;
-          (*outStream2) << offset << " ";
-          (*outStream2) << min_ll/xscal << " ";
-          (*outStream2) << max_ll/xscal << " ";
-          (*outStream2) << -1 << " ";
-          (*outStream2) << offset << " " << size << "\n";
-
-          (*outStream3) << offset << " ";
-        }
-        else if(leafValue[leafParent[i]]>min_ll)
-        {
-          size++;
-          (*outStream2) << offset << " ";
-          (*outStream2) << min_ll/xscal << " ";
-          (*outStream2) << leafValue[leafParent[i]]/xscal << " ";
-          (*outStream2) << tmpIntArray[leafParent[i]-numOfParticles] << " ";
-          (*outStream2) << offset << " " << size << "\n";
-
-          (*outStream3) << offset << " ";
-        }
-        offset += size;
-      }
-
-      //write out rest of the parent nodes in the tree
-      for(int i=0; i<numOfParticles; i++)
-      {
-        if(leafI[numOfParticles+i]!=-1)
-        {
-          (*outStream2) << tmpIntArray[i] << " ";
-          (*outStream2) << leafValue[numOfParticles+i]/xscal << " ";
-          (*outStream2) << ((leafParent[numOfParticles+i]!=-1) ? leafValue[leafParent[numOfParticles+i]]/xscal : max_ll/xscal) << " ";
-          (*outStream2) << ((leafParent[numOfParticles+i]!=-1) ? tmpIntArray[leafParent[numOfParticles+i]-numOfParticles] : -1) << " ";
-
           int size = 0;
-          //get this features particles
-          std::queue<int> children;
-          children.push(numOfParticles+i);
-          while(!children.empty())
+          if(nodeValue[i]==min_ll)
           {
-            int j = children.front();
-            children.pop();
-
-            if(leafValue[j]==0) { (*outStream3) << j << " ";  size++; }
-
-            int child = leafChildS[j];
+            int child = nodeChildS[i];
             while(child!=-1)
-            {
-              children.push(child);
-              child = leafSibling[child];
-            }
+            { child = leafSibling[child];   size++; }
           }
 
-          (*outStream2) << offset << " " << size << "\n";
+          (*outStream2) << tmpIntArray[i] << " ";
+          (*outStream2) << nodeValue[i]/xscal << " ";
+          (*outStream2) << ((nodeParent[i]!=-1) ? nodeValue[nodeParent[i]]/xscal : max_ll/xscal) << " ";
+          (*outStream2) << ((nodeParent[i]!=-1) ? tmpIntArray[nodeParent[i]] : -1) << " ";
+          (*outStream2) << offset << " " << size << " ";
+          (*outStream2) << nodeCount[i] << "\n";
+
           offset += size;
         }
       }
       outStream2->close();
+	  }
+
+	  // write segment details - .segmentation file (particlesIds)
+	  {
+      std::ofstream *outStream3 = new std::ofstream();
+      outStream3->open((filename+".segmentation").c_str());
+      (*outStream3) << "#particlesIds \n";
+
+      for(int i=0; i<2*cubes; i++)
+      {
+        if(nodeI[i]!=-1)
+        {
+          if(nodeValue[i]==min_ll)
+          {
+            int child = nodeChildS[i];
+            while(child!=-1)
+            {
+              (*outStream3) << child << " ";
+              child = leafSibling[child];
+            }
+          }
+        }
+      }
       outStream3->close();
 	  }
 	}
@@ -506,17 +508,15 @@ public:
 	// for a given node set its halo id, for particles in filtered halos set id to -1
   struct checkIfNode : public thrust::unary_function<int, void>
   {
-    int *leafI, *tmp;
-    int numOfParticles;
+    int *nodeI, *tmp;
 
     __host__ __device__
-    checkIfNode(int *leafI, int *tmp, int numOfParticles) :
-      leafI(leafI), tmp(tmp), numOfParticles(numOfParticles) {}
+    checkIfNode(int *nodeI, int *tmp) : nodeI(nodeI), tmp(tmp) {}
 
     __host__ __device__
     void operator()(int i)
     {
-      tmp[i] = (leafI[numOfParticles+i]==-1) ? 0 : 1;
+      tmp[i] = (nodeI[i]==-1) ? 0 : 1;
     }
   };
 
@@ -526,7 +526,7 @@ public:
 	void initDetails()
 	{
 		initParticleIds();	// set particle ids
-		initNodeDetails();  // set node details
+		initLeafDetails();  // set leaf details
 		setNumberOfCubes();	// get total number of cubes
 	}
 
@@ -537,35 +537,44 @@ public:
 		thrust::sequence(particleId.begin(), particleId.end());
 	}
 
-	//set initial node details
-	void initNodeDetails()
+	//set leaf details
+	void initLeafDetails()
 	{
-	  // resize node details
-    leafX.resize(2*numOfParticles);
-    leafY.resize(2*numOfParticles);
-    leafZ.resize(2*numOfParticles);
-    leafVX.resize(2*numOfParticles);
-    leafVY.resize(2*numOfParticles);
-    leafVZ.resize(2*numOfParticles);
-    leafM.resize(2*numOfParticles);
-    leafI.resize(2*numOfParticles);
-    leafCount.resize(2*numOfParticles);
-    leafValue.resize(2*numOfParticles);
-    leafParent.resize(2*numOfParticles);
-    leafParentS.resize(2*numOfParticles);
-    leafChildS.resize(2*numOfParticles);
-    leafChildE.resize(2*numOfParticles);
-    leafSibling.resize(2*numOfParticles);
+    leafParent.resize(numOfParticles);
+    leafParentS.resize(numOfParticles);
+    leafSibling.resize(numOfParticles);
 
-    thrust::fill(leafCount.begin(),   leafCount.begin()+numOfParticles, 1);
-    thrust::fill(leafValue.begin(),   leafValue.begin()+numOfParticles,  0.0);
     thrust::fill(leafParent.begin(),  leafParent.end(),  -1);
     thrust::fill(leafParentS.begin(), leafParentS.end(), -1);
-    thrust::fill(leafChildS.begin(),  leafChildS.end(),  -1);
-    thrust::fill(leafChildE.begin(),  leafChildE.end(),  -1);
     thrust::fill(leafSibling.begin(), leafSibling.end(), -1);
-    thrust::fill(leafI.begin()+numOfParticles, leafI.end(), -1);
 	}
+
+	//set leaf details
+  void initNodeDetails()
+  {
+    // resize node details
+    nodeX.resize(2*cubes);
+    nodeY.resize(2*cubes);
+    nodeZ.resize(2*cubes);
+    nodeVX.resize(2*cubes);
+    nodeVY.resize(2*cubes);
+    nodeVZ.resize(2*cubes);
+    nodeM.resize(2*cubes);
+    nodeI.resize(2*cubes);
+    nodeValue.resize(2*cubes);
+    nodeCount.resize(2*cubes);
+
+    nodeParent.resize(2*cubes);
+    nodeChildS.resize(2*cubes);
+    nodeChildE.resize(2*cubes);
+    nodeSibling.resize(2*cubes);
+
+    thrust::fill(nodeI.begin(),       nodeI.end(),       -1);
+    thrust::fill(nodeParent.begin(),  nodeParent.end(),  -1);
+    thrust::fill(nodeChildS.begin(),  nodeChildS.end(),  -1);
+    thrust::fill(nodeChildE.begin(),  nodeChildE.end(),  -1);
+    thrust::fill(nodeSibling.begin(), nodeSibling.end(), -1);
+  }
 
 	// get total number of cubes
 	void setNumberOfCubes()
@@ -582,13 +591,15 @@ public:
 	//------- divide space into cubes
 	void divideIntoCubes()
 	{
-	  struct timeval begin, mid1, mid2, end, diff0, diff1, diff2;
+	  struct timeval begin, mid1, mid2, mid3, end, diff0, diff1, diff2, diff3;
 	  gettimeofday(&begin, 0);
 		setCubeIds();		      		// for each particle, set cube id
 	  gettimeofday(&mid1, 0);
 		sortParticlesByCubeID();  // sort Particles by cube Id
 	  gettimeofday(&mid2, 0);
 		getSizeAndStartOfCubes(); // for each cube, count its particles
+	  gettimeofday(&mid3, 0);
+	  initNodeDetails();
 	  gettimeofday(&end, 0);
 
     #ifdef TEST
@@ -603,9 +614,12 @@ public:
     timersub(&mid2, &mid1, &diff1);
     float seconds1 = diff1.tv_sec + 1.0E-6*diff1.tv_usec;
     std::cout << "Time elapsed1: " << seconds1 << " s for sortParticlesByCubeID"<< std::endl << std::flush;
-    timersub(&end, &mid2, &diff2);
+    timersub(&mid3, &mid2, &diff2);
     float seconds2 = diff2.tv_sec + 1.0E-6*diff2.tv_usec;
     std::cout << "Time elapsed2: " << seconds2 << " s for getSizeAndStartOfCubes"<< std::endl << std::flush;
+    timersub(&end, &mid3, &diff3);
+    float seconds3 = diff3.tv_sec + 1.0E-6*diff3.tv_usec;
+    std::cout << "Time elapsed3: " << seconds3 << " s for initNodeDetails"<< std::endl << std::flush;
 	}
 
 	// set cube ids of particles
@@ -745,45 +759,49 @@ public:
 	{
 		// resize vectors necessary for merge tree construction
 		tmpNxt.resize(cubes);
-		tmpFree.resize(numOfParticles);
+		tmpFree.resize(2*cubes);
 
     struct timeval begin, mid1, mid2, mid3, mid4, mid5, end, diff1, diff2, diff3, diff4, diff5, diff6;
     gettimeofday(&begin, 0);
     thrust::sequence(tmpFree.begin(), tmpFree.end(), 1);
     gettimeofday(&mid1, 0);
 		thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
-				initNxt(thrust::raw_pointer_cast(&*particleSizeOfCubes.begin()),
-								thrust::raw_pointer_cast(&*particleStartOfCubes.begin()),								
-								thrust::raw_pointer_cast(&*tmpNxt.begin()),
+				initNxt(thrust::raw_pointer_cast(&*tmpNxt.begin()),
 								thrust::raw_pointer_cast(&*tmpFree.begin())));
     gettimeofday(&mid2, 0);
 		thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
 				createSubMergeTree(thrust::raw_pointer_cast(&*leafParent.begin()),
-                           thrust::raw_pointer_cast(&*leafChildS.begin()),
-                           thrust::raw_pointer_cast(&*leafChildE.begin()),
-                           thrust::raw_pointer_cast(&*leafSibling.begin()),
+				                   thrust::raw_pointer_cast(&*leafSibling.begin()),
                            thrust::raw_pointer_cast(&*leafI.begin()),
-                           thrust::raw_pointer_cast(&*leafValue.begin()),
-                           thrust::raw_pointer_cast(&*leafCount.begin()),
 				                   thrust::raw_pointer_cast(&*leafX.begin()),
                            thrust::raw_pointer_cast(&*leafY.begin()),
                            thrust::raw_pointer_cast(&*leafZ.begin()),
                            thrust::raw_pointer_cast(&*leafVX.begin()),
                            thrust::raw_pointer_cast(&*leafVY.begin()),
                            thrust::raw_pointer_cast(&*leafVZ.begin()),
+                           thrust::raw_pointer_cast(&*nodeI.begin()),
+                           thrust::raw_pointer_cast(&*nodeCount.begin()),
+                           thrust::raw_pointer_cast(&*nodeValue.begin()),
+                           thrust::raw_pointer_cast(&*nodeChildS.begin()),
+                           thrust::raw_pointer_cast(&*nodeChildE.begin()),
+                           thrust::raw_pointer_cast(&*nodeX.begin()),
+                           thrust::raw_pointer_cast(&*nodeY.begin()),
+                           thrust::raw_pointer_cast(&*nodeZ.begin()),
+                           thrust::raw_pointer_cast(&*nodeVX.begin()),
+                           thrust::raw_pointer_cast(&*nodeVY.begin()),
+                           thrust::raw_pointer_cast(&*nodeVZ.begin()),
 													 thrust::raw_pointer_cast(&*particleId.begin()),
 													 thrust::raw_pointer_cast(&*particleSizeOfCubes.begin()),
 												 	 thrust::raw_pointer_cast(&*particleStartOfCubes.begin()),								
 													 thrust::raw_pointer_cast(&*tmpNxt.begin()),
 													 thrust::raw_pointer_cast(&*tmpFree.begin()),
-													 min_ll, numOfParticles));
+													 min_ll));
 		gettimeofday(&mid3, 0);
 		initArrays();  				    // init arrays needed for storing edges
 		gettimeofday(&mid4, 0);
 		getEdgesPerCube(); 				// for each cube, get the set of edges
 		gettimeofday(&mid5, 0);
 		sortCubeIDByParticles();	// sort cube ids by particle id
-    gettimeofday(&end, 0);
 
 		#ifdef TEST
 			outputMergeTreeDetails("The local merge trees.."); // output merge tree details
@@ -815,63 +833,63 @@ public:
   // finalize the init of tmpFree & tmpNxt arrays
   struct initNxt : public thrust::unary_function<int, void>
   {
-    int  *particleSizeOfCubes, *particleStartOfCubes;
-		int  *tmpFree, *tmpNxt;
+		int *tmpFree, *tmpNxt;
 
 		__host__ __device__
-		initNxt(int *particleSizeOfCubes, int *particleStartOfCubes, 
-			int *tmpNxt, int *tmpFree) :
-			particleSizeOfCubes(particleSizeOfCubes), particleStartOfCubes(particleStartOfCubes),			
-			tmpNxt(tmpNxt), tmpFree(tmpFree) {}
+		initNxt(int *tmpNxt, int *tmpFree) : tmpNxt(tmpNxt), tmpFree(tmpFree) {}
 
     __host__ __device__
     void operator()(int i)
     {
-			int start = particleStartOfCubes[i];
-			int size  = particleSizeOfCubes[i];
-
-		  tmpNxt[i] = (size>0) ? start : -1;
-			tmpFree[start+size-1] = -1;
+		  tmpNxt[i] = 2*i;
+			tmpFree[2*i+1] = -1;
     }
  	};
 
 	// create the submerge tree for each cube
 	struct createSubMergeTree : public thrust::unary_function<int, void>
   {
-	  int *leafParent, *leafChildS, *leafChildE, *leafSibling;
-	  int *leafI, *leafCount;
-
-	  float *leafValue;
+	  int *leafParent, *leafSibling;
+	  int *leafI;
 	  float *leafX, *leafY, *leafZ;
 	  float *leafVX, *leafVY, *leafVZ;
+
+	  int *nodeChildS, *nodeChildE;
+    int *nodeI, *nodeCount;
+    float *nodeValue;
+    float *nodeX, *nodeY, *nodeZ;
+    float *nodeVX, *nodeVY, *nodeVZ;
 
 		int *particleSizeOfCubes, *particleStartOfCubes, *particleId;
 		int *tmpNxt, *tmpFree;
 
 	  float min_ll;
-	  int numOfParticles;
 
 		__host__ __device__
-		createSubMergeTree(int *leafParent, int *leafChildS, int *leafChildE, int *leafSibling,
-		  int *leafI, float *leafValue, int *leafCount,
+		createSubMergeTree(int *leafParent, int *leafSibling, int *leafI,
 		  float *leafX, float *leafY, float *leafZ,
 		  float *leafVX, float *leafVY, float *leafVZ,
+		  int *nodeI, int *nodeCount, float *nodeValue,
+		  int *nodeChildS, int *nodeChildE,
+      float *nodeX, float *nodeY, float *nodeZ,
+      float *nodeVX, float *nodeVY, float *nodeVZ,
 		  int *particleId, int *particleSizeOfCubes, int *particleStartOfCubes,
-			int *tmpNxt, int *tmpFree, float min_ll, int numOfParticles) :
-			leafParent(leafParent), leafChildS(leafChildS), leafChildE(leafChildE), leafSibling(leafSibling),
-			leafI(leafI), leafValue(leafValue), leafCount(leafCount),
+			int *tmpNxt, int *tmpFree, float min_ll) :
+			leafParent(leafParent), leafSibling(leafSibling), leafI(leafI),
 			leafX(leafX), leafY(leafY), leafZ(leafZ),
 			leafVX(leafVX), leafVY(leafVY), leafVZ(leafVZ),
+			nodeI(nodeI), nodeCount(nodeCount), nodeValue(nodeValue),
+			nodeChildS(nodeChildS), nodeChildE(nodeChildE),
+			nodeX(nodeX), nodeY(nodeY), nodeZ(nodeZ),
+      nodeVX(nodeVX), nodeVY(nodeVY), nodeVZ(nodeVZ),
 			particleId(particleId), particleSizeOfCubes(particleSizeOfCubes), particleStartOfCubes(particleStartOfCubes),
-			tmpNxt(tmpNxt), tmpFree(tmpFree), min_ll(min_ll), numOfParticles(numOfParticles) {}
+			tmpNxt(tmpNxt), tmpFree(tmpFree), min_ll(min_ll) {}
 
     __host__ __device__
     void operator()(int i)
     {
-			if(particleSizeOfCubes[i]<=1) return;
-			
 			// get the next free node & set it as the parent
-			int n = tmpNxt[i] + numOfParticles;
+			int n = tmpNxt[i];
 			int tmpVal = tmpFree[tmpNxt[i]];
 			tmpFree[tmpNxt[i]] = -2;
 			tmpNxt[i] = tmpVal;
@@ -884,10 +902,10 @@ public:
 			{
 				int tmp = particleId[j];
 
-				leafParent[tmp] = n;
+				leafParent[tmp] = n; // n is the index in node lists
 				
-				if(leafChildS[n]==-1) { leafChildS[n]=tmp; leafChildE[n]=tmp; }
-				else     { leafSibling[leafChildE[n]]=tmp; leafChildE[n]=tmp; }
+				if(nodeChildS[n]==-1) { nodeChildS[n]=tmp; nodeChildE[n]=tmp; }
+        else { leafSibling[nodeChildE[n]]=tmp; nodeChildE[n]=tmp; }
 
 				minHaloId = (minHaloId==-1) ? leafI[tmp] : (minHaloId<leafI[tmp] ? minHaloId : leafI[tmp]);
 
@@ -896,12 +914,12 @@ public:
 				z+=leafZ[tmp]; vz+=leafVZ[tmp];
 			}
 
-			leafI[n] = minHaloId;
-			leafValue[n] = min_ll;
-      leafCount[n] = particleSizeOfCubes[i];
-      leafX[n] = x;   leafVX[n] = vx;
-      leafY[n] = y;   leafVY[n] = vy;
-      leafZ[n] = z;   leafVZ[n] = vz;
+			nodeI[n] = minHaloId;
+			nodeValue[n] = min_ll;
+      nodeCount[n] = particleSizeOfCubes[i];
+      nodeX[n] = x;   nodeVX[n] = vx;
+      nodeY[n] = y;   nodeVY[n] = vy;
+      nodeZ[n] = z;   nodeVZ[n] = vz;
     }
  	};
 
@@ -1267,30 +1285,33 @@ public:
 				combineFreeLists(thrust::raw_pointer_cast(&*tmpNxt.begin()),
 												 thrust::raw_pointer_cast(&*tmpFree.begin()),
 												 sizeP, cubesOri));
+
 			thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
 				combineMergeTrees(thrust::raw_pointer_cast(&*cubeMapping.begin()),
 													thrust::raw_pointer_cast(&*cubeId.begin()),
 													thrust::raw_pointer_cast(&*tmpNxt.begin()),
 													thrust::raw_pointer_cast(&*tmpFree.begin()),
 													thrust::raw_pointer_cast(&*leafParent.begin()),
-                          thrust::raw_pointer_cast(&*leafChildS.begin()),
-                          thrust::raw_pointer_cast(&*leafChildE.begin()),
                           thrust::raw_pointer_cast(&*leafSibling.begin()),
-                          thrust::raw_pointer_cast(&*leafI.begin()),
-                          thrust::raw_pointer_cast(&*leafValue.begin()),
-                          thrust::raw_pointer_cast(&*leafCount.begin()),
-                          thrust::raw_pointer_cast(&*leafX.begin()),
-                          thrust::raw_pointer_cast(&*leafY.begin()),
-                          thrust::raw_pointer_cast(&*leafZ.begin()),
-                          thrust::raw_pointer_cast(&*leafVX.begin()),
-                          thrust::raw_pointer_cast(&*leafVY.begin()),
-                          thrust::raw_pointer_cast(&*leafVZ.begin()),
+													thrust::raw_pointer_cast(&*nodeParent.begin()),
+                          thrust::raw_pointer_cast(&*nodeChildS.begin()),
+                          thrust::raw_pointer_cast(&*nodeChildE.begin()),
+                          thrust::raw_pointer_cast(&*nodeSibling.begin()),
+                          thrust::raw_pointer_cast(&*nodeI.begin()),
+                          thrust::raw_pointer_cast(&*nodeValue.begin()),
+                          thrust::raw_pointer_cast(&*nodeCount.begin()),
+                          thrust::raw_pointer_cast(&*nodeX.begin()),
+                          thrust::raw_pointer_cast(&*nodeY.begin()),
+                          thrust::raw_pointer_cast(&*nodeZ.begin()),
+                          thrust::raw_pointer_cast(&*nodeVX.begin()),
+                          thrust::raw_pointer_cast(&*nodeVY.begin()),
+                          thrust::raw_pointer_cast(&*nodeVZ.begin()),
                           thrust::raw_pointer_cast(&*edgesSrc.begin()),
                           thrust::raw_pointer_cast(&*edgesDes.begin()),
                           thrust::raw_pointer_cast(&*edgesWeight.begin()),
 													thrust::raw_pointer_cast(&*edgeStartOfCubes.begin()),
 													thrust::raw_pointer_cast(&*edgeSizeOfCubes.begin()),
-													min_ll, sizeP, cubesOri, numOfParticles));
+													min_ll, sizeP, cubesOri));
 			gettimeofday(&end, 0);
 
       timersub(&end, &begin, &diff);
@@ -1305,6 +1326,8 @@ public:
 			cubesOld = cubes;
 			cubes = (int)std::ceil(((double)cubes/2));
 		}
+
+		cubes = cubesOri;
 	}
 
 	// combine free nodes lists of each cube at this iteration
@@ -1344,7 +1367,7 @@ public:
 	struct combineMergeTrees : public thrust::unary_function<int, void>
   {
     float  min_ll;
-		int    sizeP, numOfCubesOri, numOfParticles;
+		int    sizeP, numOfCubesOri;
 
     int   *cubeId, *cubeMapping;
 		int   *tmpNxt, *tmpFree;
@@ -1353,30 +1376,32 @@ public:
     float *edgesWeight;
 		int   *edgeStartOfCubes, *edgeSizeOfCubes;
 
-    int *leafParent, *leafChildS, *leafChildE, *leafSibling;
-    int *leafI, *leafCount;
-
-    float *leafValue;
-    float *leafX, *leafY, *leafZ;
-    float *leafVX, *leafVY, *leafVZ;
+    int *leafParent, *leafSibling;
+    int *nodeParent, *nodeChildS, *nodeChildE, *nodeSibling;
+    int *nodeI, *nodeCount;
+    float *nodeValue;
+    float *nodeX, *nodeY, *nodeZ;
+    float *nodeVX, *nodeVY, *nodeVZ;
 
     __host__ __device__
     combineMergeTrees(int *cubeMapping, int *cubeId, int *tmpNxt, int *tmpFree,
-        int *leafParent, int *leafChildS, int *leafChildE, int *leafSibling,
-        int *leafI, float *leafValue, int *leafCount,
-        float *leafX, float *leafY, float *leafZ,
-        float *leafVX, float *leafVY, float *leafVZ,
+        int *leafParent, int *leafSibling,
+        int *nodeParent, int *nodeChildS, int *nodeChildE, int *nodeSibling,
+        int *nodeI, float *nodeValue, int *nodeCount,
+        float *nodeX, float *nodeY, float *nodeZ,
+        float *nodeVX, float *nodeVY, float *nodeVZ,
         int *edgesSrc, int *edgesDes, float *edgesWeight,
         int *edgeStartOfCubes, int *edgeSizeOfCubes,
-				float min_ll, int sizeP, int numOfCubesOri, int numOfParticles) :
+				float min_ll, int sizeP, int numOfCubesOri) :
         cubeMapping(cubeMapping), cubeId(cubeId), tmpNxt(tmpNxt), tmpFree(tmpFree),
-        leafParent(leafParent), leafChildS(leafChildS), leafChildE(leafChildE), leafSibling(leafSibling),
-        leafI(leafI), leafValue(leafValue), leafCount(leafCount),
-        leafX(leafX), leafY(leafY), leafZ(leafZ),
-        leafVX(leafVX), leafVY(leafVY), leafVZ(leafVZ),
+        leafParent(leafParent), leafSibling(leafSibling),
+        nodeParent(nodeParent), nodeChildS(nodeChildS), nodeChildE(nodeChildE), nodeSibling(nodeSibling),
+        nodeI(nodeI), nodeValue(nodeValue), nodeCount(nodeCount),
+        nodeX(nodeX), nodeY(nodeY), nodeZ(nodeZ),
+        nodeVX(nodeVX), nodeVY(nodeVY), nodeVZ(nodeVZ),
         edgesSrc(edgesSrc), edgesDes(edgesDes), edgesWeight(edgesWeight),
         edgeStartOfCubes(edgeStartOfCubes), edgeSizeOfCubes(edgeSizeOfCubes),
-				min_ll(min_ll), sizeP(sizeP), numOfCubesOri(numOfCubesOri), numOfParticles(numOfParticles) {}
+				min_ll(min_ll), sizeP(sizeP), numOfCubesOri(numOfCubesOri) {}
 
     __host__ __device__
     void operator()(int i)
@@ -1411,108 +1436,120 @@ public:
 					// use this edge (e), to combine the merge trees
 					//-----------------------------------------------------
 
-					int src = eSrc;
-					int des = eDes;
+					int src = leafParent[eSrc];
+					int des = leafParent[eDes];
 
 					float weight = (eWeight < min_ll) ? min_ll : eWeight;
 
 					// find the src & des nodes just below the required weight
-					while(leafParent[src]!=-1 && leafValue[leafParent[src]]<=weight) src = leafParent[src];
-					while(leafParent[des]!=-1 && leafValue[leafParent[des]]<=weight) des = leafParent[des];
+					while(nodeParent[src]!=-1 && nodeValue[nodeParent[src]]<=weight) src = nodeParent[src];
+					while(nodeParent[des]!=-1 && nodeValue[nodeParent[des]]<=weight) des = nodeParent[des];
 
 					// if src & des already have the same halo id, do NOT do anything
-          if(leafI[src]==leafI[des]) continue;
+          if(nodeI[src]==nodeI[des]) continue;
 
-          int srcCount = leafCount[src];
-          int desCount = leafCount[des];
+          int srcCount = nodeCount[src];
+          int desCount = nodeCount[des];
 
-          float srcX = leafX[src]; float desX = leafX[des]; float srcVX = leafVX[src]; float desVX = leafVX[des];
-          float srcY = leafY[src]; float desY = leafY[des]; float srcVY = leafVY[src]; float desVY = leafVY[des];
-          float srcZ = leafZ[src]; float desZ = leafZ[des]; float srcVZ = leafVZ[src]; float desVZ = leafVZ[des];
+          float srcX = nodeX[src]; float desX = nodeX[des]; float srcVX = nodeVX[src]; float desVX = nodeVX[des];
+          float srcY = nodeY[src]; float desY = nodeY[des]; float srcVY = nodeVY[src]; float desVY = nodeVY[des];
+          float srcZ = nodeZ[src]; float desZ = nodeZ[des]; float srcVZ = nodeVZ[src]; float desVZ = nodeVZ[des];
 
           // get the original parents of src & des nodes
-          int srcTmp = leafParent[src];
-          int desTmp = leafParent[des];
+          int srcTmp = nodeParent[src];
+          int desTmp = nodeParent[des];
 
           // remove the src & des from the child list of their parents
           if(srcTmp!=-1)
           {
-            int child = leafChildS[srcTmp];
-            if(child!=-1 && leafValue[child]==leafValue[src] && leafI[child]==leafI[src])
-              leafChildS[srcTmp] = leafSibling[child];
+            int child = nodeChildS[srcTmp];
+            if(child!=-1 && nodeValue[child]==nodeValue[src] && nodeI[child]==nodeI[src])
+              nodeChildS[srcTmp] = nodeSibling[child];
             else
             {
-              while(child!=-1 && leafSibling[child]!=-1)
+              while(child!=-1 && nodeSibling[child]!=-1)
               {
-                if(leafValue[leafSibling[child]]==leafValue[src] && leafI[leafSibling[child]]==leafI[src])
-                { leafSibling[child] = leafSibling[leafSibling[child]];   break; }
-                child = leafSibling[child];
+                if(nodeValue[nodeSibling[child]]==nodeValue[src] && nodeI[nodeSibling[child]]==nodeI[src])
+                { nodeSibling[child] = nodeSibling[nodeSibling[child]];   break; }
+                child = nodeSibling[child];
               }
 
-              if(child!=-1 && leafSibling[child]==-1) leafChildE[srcTmp] = child;
+              if(child!=-1 && nodeSibling[child]==-1) nodeChildE[srcTmp] = child;
             }
 
-            if(leafChildS[srcTmp]==-1) leafChildE[srcTmp] = -1;
+            if(nodeChildS[srcTmp]==-1) nodeChildE[srcTmp] = -1;
           }
-          leafParent[src] = -1; leafSibling[src] = -1;
+          nodeParent[src] = -1; nodeSibling[src] = -1;
 
           if(desTmp!=-1)
           {
-            int child = leafChildS[desTmp];
-            if(child!=-1 && leafValue[child]==leafValue[des] && leafI[child]==leafI[des])
-              leafChildS[desTmp] = leafSibling[child];
+            int child = nodeChildS[desTmp];
+            if(child!=-1 && nodeValue[child]==nodeValue[des] && nodeI[child]==nodeI[des])
+              nodeChildS[desTmp] = nodeSibling[child];
             else
             {
-              while(child!=-1 && leafSibling[child]!=-1)
+              while(child!=-1 && nodeSibling[child]!=-1)
               {
-                if(leafValue[leafSibling[child]]==leafValue[des] && leafI[leafSibling[child]]==leafI[des])
-                { leafSibling[child] = leafSibling[leafSibling[child]];   break; }
-                child = leafSibling[child];
+                if(nodeValue[nodeSibling[child]]==nodeValue[des] && nodeI[nodeSibling[child]]==nodeI[des])
+                { nodeSibling[child] = nodeSibling[nodeSibling[child]];   break; }
+                child = nodeSibling[child];
               }
 
-              if(child!=-1 && leafSibling[child]==-1) leafChildE[desTmp] = child;
+              if(child!=-1 && nodeSibling[child]==-1) nodeChildE[desTmp] = child;
             }
 
-            if(leafChildS[desTmp]==-1) leafChildE[desTmp] = -1;
+            if(nodeChildS[desTmp]==-1) nodeChildE[desTmp] = -1;
           }
-          leafParent[des] = -1; leafSibling[des] = -1;
+          nodeParent[des] = -1; nodeSibling[des] = -1;
 
 
 
           // set n node
           int n;
           bool freeDes=false;
-          if(leafValue[src]==weight && leafValue[des]==weight) // merge src & des, free des node, set n to src, then connect their children & fix the loop
+          if(nodeValue[src]==weight && nodeValue[des]==weight) // merge src & des, free des node, set n to src, then connect their children & fix the loop
           {
             n = src;
-            int child = leafChildS[des];
-            while(child!=-1) { leafParent[child] = n; child = leafSibling[child]; }
+            if(weight!=min_ll)
+            {
+              int child = nodeChildS[des];
+              while(child!=-1) { nodeParent[child] = n; child = nodeSibling[child]; }
 
-            if(leafChildE[n]!=-1)  leafSibling[leafChildE[n]] = leafChildS[des];
-            else  leafChildS[n] = leafChildS[des];
-            leafChildE[n] = leafChildE[des];
+              if(nodeChildE[n]!=-1)  nodeSibling[nodeChildE[n]] = nodeChildS[des];
+              else  nodeChildS[n] = nodeChildS[des];
+              nodeChildE[n] = nodeChildE[des];
+            }
+            else
+            {
+              int child = nodeChildS[des];
+              while(child!=-1) { leafParent[child] = n; child = leafSibling[child]; }
+
+              if(nodeChildE[n]!=-1)  leafSibling[nodeChildE[n]] = nodeChildS[des];
+              else  nodeChildS[n] = nodeChildS[des];
+              nodeChildE[n] = nodeChildE[des];
+            }
             freeDes = true;
           }
-          else if(leafValue[src]==weight) // set des node's parent to be src, set n to src, then fix the loop
+          else if(nodeValue[src]==weight) // set des node's parent to be src, set n to src, then fix the loop
           {
-            n = src;  leafSibling[leafChildE[n]] = des;   leafChildE[n] = des;    leafParent[des] = n;
+            n = src;  nodeSibling[nodeChildE[n]] = des;   nodeChildE[n] = des;    nodeParent[des] = n;
           }
-          else if(leafValue[des]==weight) // set src node's parent to be des, set n to des, then fix the loop
+          else if(nodeValue[des]==weight) // set src node's parent to be des, set n to des, then fix the loop
           {
-            n = des;  leafSibling[leafChildE[n]] = src;   leafChildE[n] = src;    leafParent[src] = n;
+            n = des;  nodeSibling[nodeChildE[n]] = src;   nodeChildE[n] = src;    nodeParent[src] = n;
           }
-          else if(leafValue[src]!=weight && leafValue[des]!=weight) // create a new node, set this as parent of both src & des, then fix the loop
+          else if(nodeValue[src]!=weight && nodeValue[des]!=weight) // create a new node, set this as parent of both src & des, then fix the loop
           {
             if(tmpNxt[cubeStart]!=-1)
             {
-              n = tmpNxt[cubeStart] + numOfParticles;
+              n = tmpNxt[cubeStart];
               int tmpVal = tmpFree[tmpNxt[cubeStart]];
               tmpFree[tmpNxt[cubeStart]] = -2;
               tmpNxt[cubeStart] = tmpVal;
 
-              leafChildS[n] = src;  leafChildE[n] = des;
-              leafParent[src] = n;  leafParent[des] = n;
-              leafSibling[src] = des;
+              nodeChildS[n] = src;  nodeChildE[n] = des;
+              nodeParent[src] = n;  nodeParent[des] = n;
+              nodeSibling[src] = des;
             }
             #if THRUST_DEVICE_BACKEND != THRUST_DEVICE_BACKEND_CUDA
             else
@@ -1520,30 +1557,30 @@ public:
             #endif
           }
 
-          leafValue[n] = weight;
-          leafCount[n] = leafCount[src] + leafCount[des];
-          leafX[n] = leafX[src]+leafX[des];   leafVX[n] = leafVX[src]+leafVX[des];
-          leafY[n] = leafY[src]+leafY[des];   leafVY[n] = leafVY[src]+leafVY[des];
-          leafZ[n] = leafZ[src]+leafZ[des];   leafVZ[n] = leafVZ[src]+leafVZ[des];
-          leafI[n] = (leafI[src] < leafI[des]) ? leafI[src] : leafI[des];
+          nodeValue[n] = weight;
+          nodeCount[n] = nodeCount[src] + nodeCount[des];
+          nodeX[n] = nodeX[src]+nodeX[des];   nodeVX[n] = nodeVX[src]+nodeVX[des];
+          nodeY[n] = nodeY[src]+nodeY[des];   nodeVY[n] = nodeVY[src]+nodeVY[des];
+          nodeZ[n] = nodeZ[src]+nodeZ[des];   nodeVZ[n] = nodeVZ[src]+nodeVZ[des];
+          nodeI[n] = (nodeI[src] < nodeI[des]) ? nodeI[src] : nodeI[des];
 
-          if(freeDes && des>=numOfParticles)
+          if(freeDes)
           {
             // free des node
             int tmpVal = tmpNxt[cubeStart];
-            tmpNxt[cubeStart] = des-numOfParticles;
+            tmpNxt[cubeStart] = des;
             tmpFree[tmpNxt[cubeStart]] = tmpVal;
 
-            leafI[des] = -1;
-            leafValue[des] = 0.0f;
-            leafCount[des] = 0;
-            leafX[des] = 0; leafVX[des] = 0;
-            leafY[des] = 0; leafVX[des] = 0;
-            leafZ[des] = 0; leafVX[des] = 0;
-            leafParent[des] = -1;
-            leafChildS[des] = -1;
-            leafChildE[des] = -1;
-            leafSibling[des] = -1;
+            nodeI[des] = -1;
+            nodeValue[des] = 0.0f;
+            nodeCount[des] = 0;
+            nodeX[des] = 0; nodeVX[des] = 0;
+            nodeY[des] = 0; nodeVX[des] = 0;
+            nodeZ[des] = 0; nodeVX[des] = 0;
+            nodeParent[des] = -1;
+            nodeChildS[des] = -1;
+            nodeChildE[des] = -1;
+            nodeSibling[des] = -1;
           }
 
 
@@ -1551,163 +1588,162 @@ public:
           bool done = false;
           while(srcTmp!=-1 && desTmp!=-1)
           {
-            if(leafValue[srcTmp] < leafValue[desTmp])
+            if(nodeValue[srcTmp] < nodeValue[desTmp])
             {
-              leafParent[n] = srcTmp;
+              nodeParent[n] = srcTmp;
 
-              if(leafChildE[srcTmp]!=-1) leafSibling[leafChildE[srcTmp]] = n;
-              else leafChildS[srcTmp] = n;
-              leafChildE[srcTmp] = n;
+              if(nodeChildE[srcTmp]!=-1) nodeSibling[nodeChildE[srcTmp]] = n;
+              else nodeChildS[srcTmp] = n;
+              nodeChildE[srcTmp] = n;
 
-              leafI[srcTmp] = (leafI[srcTmp]<leafI[n]) ? leafI[srcTmp] : leafI[n];
-              srcCount = leafCount[srcTmp];
-              leafCount[srcTmp] += desCount;
-              srcX = leafX[srcTmp];   srcVX = leafVX[srcTmp];
-              srcY = leafY[srcTmp];   srcVY = leafVY[srcTmp];
-              srcZ = leafZ[srcTmp];   srcVZ = leafVZ[srcTmp];
-              leafX[srcTmp] += desX;  leafVX[srcTmp] += desVX;
-              leafY[srcTmp] += desY;  leafVY[srcTmp] += desVY;
-              leafZ[srcTmp] += desZ;  leafVZ[srcTmp] += desVZ;
+              nodeI[srcTmp] = (nodeI[srcTmp]<nodeI[n]) ? nodeI[srcTmp] : nodeI[n];
+              srcCount = nodeCount[srcTmp];
+              nodeCount[srcTmp] += desCount;
+              srcX = nodeX[srcTmp];   srcVX = nodeVX[srcTmp];
+              srcY = nodeY[srcTmp];   srcVY = nodeVY[srcTmp];
+              srcZ = nodeZ[srcTmp];   srcVZ = nodeVZ[srcTmp];
+              nodeX[srcTmp] += desX;  nodeVX[srcTmp] += desVX;
+              nodeY[srcTmp] += desY;  nodeVY[srcTmp] += desVY;
+              nodeZ[srcTmp] += desZ;  nodeVZ[srcTmp] += desVZ;
 
               n = srcTmp;
-              srcTmp = leafParent[srcTmp];
+              srcTmp = nodeParent[srcTmp];
 
               if(srcTmp!=-1)
               {
-                int child = leafChildS[srcTmp];
-                if(child!=-1 && leafValue[child]==leafValue[n] && leafI[child]==leafI[n])
-                  leafChildS[srcTmp] = leafSibling[child];
+                int child = nodeChildS[srcTmp];
+                if(child!=-1 && nodeValue[child]==nodeValue[n] && nodeI[child]==nodeI[n])
+                  nodeChildS[srcTmp] = nodeSibling[child];
                 else
                 {
-                  while(child!=-1 && leafSibling[child]!=-1)
+                  while(child!=-1 && nodeSibling[child]!=-1)
                   {
-                    if(leafValue[leafSibling[child]]==leafValue[n] && leafI[leafSibling[child]]==leafI[n])
-                    { leafSibling[child] = leafSibling[leafSibling[child]]; break; }
-                    child = leafSibling[child];
+                    if(nodeValue[nodeSibling[child]]==nodeValue[n] && nodeI[nodeSibling[child]]==nodeI[n])
+                    { nodeSibling[child] = nodeSibling[nodeSibling[child]]; break; }
+                    child = nodeSibling[child];
                   }
 
-                  if(child!=-1 && leafSibling[child]==-1) leafChildE[srcTmp] = child;
+                  if(child!=-1 && nodeSibling[child]==-1) nodeChildE[srcTmp] = child;
                 }
 
-                if(leafChildS[srcTmp]==-1) leafChildE[srcTmp] = -1;
+                if(nodeChildS[srcTmp]==-1) nodeChildE[srcTmp] = -1;
               }
-              leafParent[n] = -1; leafSibling[n] = -1;
+              nodeParent[n] = -1; nodeSibling[n] = -1;
             }
-            else if(leafValue[srcTmp] > leafValue[desTmp])
+            else if(nodeValue[srcTmp] > nodeValue[desTmp])
             {
-              leafParent[n] = desTmp;
+              nodeParent[n] = desTmp;
 
-              if(leafChildE[desTmp]!=-1) leafSibling[leafChildE[desTmp]] = n;
-              else leafChildS[desTmp] = n;
-              leafChildE[desTmp] = n;
+              if(nodeChildE[desTmp]!=-1) nodeSibling[nodeChildE[desTmp]] = n;
+              else nodeChildS[desTmp] = n;
+              nodeChildE[desTmp] = n;
 
-              leafI[desTmp] = (leafI[desTmp]<leafI[n]) ? leafI[desTmp] : leafI[n];
-              desCount = leafCount[desTmp];
-              leafCount[desTmp] += srcCount;
-              desX = leafX[desTmp];   desVX = leafVX[desTmp];
-              desY = leafY[desTmp];   desVY = leafVY[desTmp];
-              desZ = leafZ[desTmp];   desVZ = leafVZ[desTmp];
-              leafX[desTmp] += srcX;  leafVX[desTmp] += srcVX;
-              leafY[desTmp] += srcY;  leafVY[desTmp] += srcVY;
-              leafZ[desTmp] += srcZ;  leafVZ[desTmp] += srcVZ;
+              nodeI[desTmp] = (nodeI[desTmp]<nodeI[n]) ? nodeI[desTmp] : nodeI[n];
+              desCount = nodeCount[desTmp];
+              nodeCount[desTmp] += srcCount;
+              desX = nodeX[desTmp];   desVX = nodeVX[desTmp];
+              desY = nodeY[desTmp];   desVY = nodeVY[desTmp];
+              desZ = nodeZ[desTmp];   desVZ = nodeVZ[desTmp];
+              nodeX[desTmp] += srcX;  nodeVX[desTmp] += srcVX;
+              nodeY[desTmp] += srcY;  nodeVY[desTmp] += srcVY;
+              nodeZ[desTmp] += srcZ;  nodeVZ[desTmp] += srcVZ;
 
               n = desTmp;
-              desTmp = leafParent[desTmp];
+              desTmp = nodeParent[desTmp];
 
               if(desTmp!=-1)
               {
-                int child = leafChildS[desTmp];
-                if(child!=-1 && leafValue[child]==leafValue[n] && leafI[child]==leafI[n])
-                  leafChildS[desTmp] = leafSibling[child];
+                int child = nodeChildS[desTmp];
+                if(child!=-1 && nodeValue[child]==nodeValue[n] && nodeI[child]==nodeI[n])
+                  nodeChildS[desTmp] = nodeSibling[child];
                 else
                 {
-                  while(child!=-1 && leafSibling[child]!=-1)
+                  while(child!=-1 && nodeSibling[child]!=-1)
                   {
-                    if(leafValue[leafSibling[child]]==leafValue[n] && leafI[leafSibling[child]]==leafI[n])
-                    { leafSibling[child] = leafSibling[leafSibling[child]]; break; }
-                    child = leafSibling[child];
+                    if(nodeValue[nodeSibling[child]]==nodeValue[n] && nodeI[nodeSibling[child]]==nodeI[n])
+                    { nodeSibling[child] = nodeSibling[nodeSibling[child]]; break; }
+                    child = nodeSibling[child];
                   }
 
-                  if(child!=-1 && leafSibling[child]==-1) leafChildE[desTmp] = child;
+                  if(child!=-1 && nodeSibling[child]==-1) nodeChildE[desTmp] = child;
                 }
 
-                if(leafChildS[desTmp]==-1) leafChildE[desTmp] = -1;
+                if(nodeChildS[desTmp]==-1) nodeChildE[desTmp] = -1;
               }
-              leafParent[n] = -1; leafSibling[n] = -1;
+              nodeParent[n] = -1; nodeSibling[n] = -1;
             }
-            else if(leafValue[srcTmp] == leafValue[desTmp])
+            else if(nodeValue[srcTmp] == nodeValue[desTmp])
             {
-              if(leafI[srcTmp] != leafI[desTmp]) // combine srcTmp & desTmp
+              if(nodeI[srcTmp] != nodeI[desTmp]) // combine srcTmp & desTmp
               {
-                int child = leafChildS[desTmp];
-                while(child!=-1) { leafParent[child] = srcTmp;  child = leafSibling[child]; }
+                int child = nodeChildS[desTmp];
+                while(child!=-1) { nodeParent[child] = srcTmp;  child = nodeSibling[child]; }
 
-                if(leafChildE[srcTmp]!=-1) leafSibling[leafChildE[srcTmp]] = leafChildS[desTmp];
-                else leafChildS[srcTmp] = leafChildS[desTmp];
-                leafChildE[srcTmp] = leafChildE[desTmp];
+                if(nodeChildE[srcTmp]!=-1) nodeSibling[nodeChildE[srcTmp]] = nodeChildS[desTmp];
+                else nodeChildS[srcTmp] = nodeChildS[desTmp];
+                nodeChildE[srcTmp] = nodeChildE[desTmp];
 
-                leafI[srcTmp] = (leafI[srcTmp]<leafI[desTmp]) ? leafI[srcTmp] : leafI[desTmp];
-                leafCount[srcTmp] += leafCount[desTmp];
-                leafX[srcTmp] += leafX[desTmp];  leafVX[srcTmp] += leafVX[desTmp];
-                leafY[srcTmp] += leafY[desTmp];  leafVY[srcTmp] += leafVY[desTmp];
-                leafZ[srcTmp] += leafZ[desTmp];  leafVZ[srcTmp] += leafVZ[desTmp];
+                nodeI[srcTmp] = (nodeI[srcTmp]<nodeI[desTmp]) ? nodeI[srcTmp] : nodeI[desTmp];
+                nodeCount[srcTmp] += nodeCount[desTmp];
+                nodeX[srcTmp] += nodeX[desTmp];  nodeVX[srcTmp] += nodeVX[desTmp];
+                nodeY[srcTmp] += nodeY[desTmp];  nodeVY[srcTmp] += nodeVY[desTmp];
+                nodeZ[srcTmp] += nodeZ[desTmp];  nodeVZ[srcTmp] += nodeVZ[desTmp];
               }
 
-              if(leafChildS[srcTmp]==-1 && leafChildE[srcTmp]==-1)
+              if(nodeChildS[srcTmp]==-1 && nodeChildE[srcTmp]==-1)
               {
-                if(leafParent[srcTmp]!=-1)
+                if(nodeParent[srcTmp]!=-1)
                 {
-                  int child = leafChildS[leafParent[srcTmp]];
-                  if(child!=-1 && leafValue[child]==leafValue[srcTmp] && leafI[child]==leafI[srcTmp])
-                    leafChildS[leafParent[srcTmp]] = leafSibling[child];
+                  int child = nodeChildS[nodeParent[srcTmp]];
+                  if(child!=-1 && nodeValue[child]==nodeValue[srcTmp] && nodeI[child]==nodeI[srcTmp])
+                    nodeChildS[nodeParent[srcTmp]] = nodeSibling[child];
                   else
                   {
-                    while(child!=-1 && leafSibling[child]!=-1)
+                    while(child!=-1 && nodeSibling[child]!=-1)
                     {
-                      if(leafValue[leafSibling[child]]==leafValue[srcTmp] && leafI[leafSibling[child]]==leafI[srcTmp])
-                      { leafSibling[child] = leafSibling[leafSibling[child]]; break; }
-                      child = leafSibling[child];
+                      if(nodeValue[nodeSibling[child]]==nodeValue[srcTmp] && nodeI[nodeSibling[child]]==nodeI[srcTmp])
+                      { nodeSibling[child] = nodeSibling[nodeSibling[child]]; break; }
+                      child = nodeSibling[child];
                     }
 
-                    if(child!=-1 && leafSibling[child]==-1) leafChildE[leafParent[srcTmp]] = child;
+                    if(child!=-1 && nodeSibling[child]==-1) nodeChildE[nodeParent[srcTmp]] = child;
                   }
 
-                  if(leafChildS[leafParent[srcTmp]]==1) leafChildE[leafParent[srcTmp]] = -1;
+                  if(nodeChildS[nodeParent[srcTmp]]==1) nodeChildE[nodeParent[srcTmp]] = -1;
                 }
 
-                int tmp = leafParent[srcTmp];
-                if(srcTmp>=numOfParticles)
+                int tmp = nodeParent[srcTmp];
                 {
                   // free srcTmp node
                   int tmpVal = tmpNxt[cubeStart];
-                  tmpNxt[cubeStart] = srcTmp-numOfParticles;
+                  tmpNxt[cubeStart] = srcTmp;
                   tmpFree[tmpNxt[cubeStart]] = tmpVal;
 
-                  leafI[srcTmp] = -1;
-                  leafValue[srcTmp] = 0.0f;
-                  leafCount[srcTmp] = 0;
-                  leafX[srcTmp] = 0;   leafVX[srcTmp] = 0;
-                  leafY[srcTmp] = 0;   leafVX[srcTmp] = 0;
-                  leafZ[srcTmp] = 0;   leafVX[srcTmp] = 0;
-                  leafParent[srcTmp] = -1;
-                  leafChildS[srcTmp] = -1;
-                  leafChildE[srcTmp] = -1;
-                  leafSibling[srcTmp] = -1;
+                  nodeI[srcTmp] = -1;
+                  nodeValue[srcTmp] = 0.0f;
+                  nodeCount[srcTmp] = 0;
+                  nodeX[srcTmp] = 0;   nodeVX[srcTmp] = 0;
+                  nodeY[srcTmp] = 0;   nodeVX[srcTmp] = 0;
+                  nodeZ[srcTmp] = 0;   nodeVX[srcTmp] = 0;
+                  nodeParent[srcTmp] = -1;
+                  nodeChildS[srcTmp] = -1;
+                  nodeChildE[srcTmp] = -1;
+                  nodeSibling[srcTmp] = -1;
                 }
                 srcTmp = tmp;
               }
 
               if(srcTmp!=-1)
               {
-                leafParent[n] = srcTmp;
+                nodeParent[n] = srcTmp;
 
-                if(leafChildE[srcTmp]!=-1) leafSibling[leafChildE[srcTmp]] = n;
-                else  leafChildS[srcTmp] = n;
-                leafChildE[srcTmp] = n;
+                if(nodeChildE[srcTmp]!=-1) nodeSibling[nodeChildE[srcTmp]] = n;
+                else  nodeChildS[srcTmp] = n;
+                nodeChildE[srcTmp] = n;
 
-                leafI[srcTmp] = (leafI[srcTmp]<leafI[n]) ? leafI[srcTmp] : leafI[n];
+                nodeI[srcTmp] = (nodeI[srcTmp]<nodeI[n]) ? nodeI[srcTmp] : nodeI[n];
               }
-              else  leafParent[n] = -1;
+              else  nodeParent[n] = -1;
 
               done = true;
               break;
@@ -1718,77 +1754,77 @@ public:
 
           if(!done && srcTmp!=-1)
           {
-            leafParent[n] = srcTmp;
+            nodeParent[n] = srcTmp;
 
-            if(leafChildE[srcTmp])  leafSibling[leafChildE[srcTmp]] = n;
-            else  leafChildS[srcTmp] = n;
-            leafChildE[srcTmp] = n;
+            if(nodeChildE[srcTmp])  nodeSibling[nodeChildE[srcTmp]] = n;
+            else  nodeChildS[srcTmp] = n;
+            nodeChildE[srcTmp] = n;
 
-            leafI[srcTmp] = (leafI[srcTmp]<leafI[n]) ? leafI[srcTmp] : leafI[n];
-            srcCount = leafCount[srcTmp];
-            leafCount[srcTmp] += desCount;
-            srcX = leafX[srcTmp];   srcVX = leafVX[srcTmp];
-            srcY = leafY[srcTmp];   srcVY = leafVY[srcTmp];
-            srcZ = leafZ[srcTmp];   srcVZ = leafVZ[srcTmp];
-            leafX[srcTmp] += desX;  leafVX[srcTmp] += desVX;
-            leafY[srcTmp] += desY;  leafVY[srcTmp] += desVY;
-            leafZ[srcTmp] += desZ;  leafVZ[srcTmp] += desVZ;
+            nodeI[srcTmp] = (nodeI[srcTmp]<nodeI[n]) ? nodeI[srcTmp] : nodeI[n];
+            srcCount = nodeCount[srcTmp];
+            nodeCount[srcTmp] += desCount;
+            srcX = nodeX[srcTmp];   srcVX = nodeVX[srcTmp];
+            srcY = nodeY[srcTmp];   srcVY = nodeVY[srcTmp];
+            srcZ = nodeZ[srcTmp];   srcVZ = nodeVZ[srcTmp];
+            nodeX[srcTmp] += desX;  nodeVX[srcTmp] += desVX;
+            nodeY[srcTmp] += desY;  nodeVY[srcTmp] += desVY;
+            nodeZ[srcTmp] += desZ;  nodeVZ[srcTmp] += desVZ;
 
             n = srcTmp;
-            srcTmp = leafParent[srcTmp];
+            srcTmp = nodeParent[srcTmp];
           }
           while(!done && srcTmp!=-1)
           {
-            leafI[srcTmp] = (leafI[srcTmp]<leafI[n]) ? leafI[srcTmp] : leafI[n];
-            srcCount = leafCount[srcTmp];
-            leafCount[srcTmp] += desCount;
-            srcX = leafX[srcTmp];   srcVX = leafVX[srcTmp];
-            srcY = leafY[srcTmp];   srcVY = leafVY[srcTmp];
-            srcZ = leafZ[srcTmp];   srcVZ = leafVZ[srcTmp];
-            leafX[srcTmp] += desX;  leafVX[srcTmp] += desVX;
-            leafY[srcTmp] += desY;  leafVY[srcTmp] += desVY;
-            leafZ[srcTmp] += desZ;  leafVZ[srcTmp] += desVZ;
+            nodeI[srcTmp] = (nodeI[srcTmp]<nodeI[n]) ? nodeI[srcTmp] : nodeI[n];
+            srcCount = nodeCount[srcTmp];
+            nodeCount[srcTmp] += desCount;
+            srcX = nodeX[srcTmp];   srcVX = nodeVX[srcTmp];
+            srcY = nodeY[srcTmp];   srcVY = nodeVY[srcTmp];
+            srcZ = nodeZ[srcTmp];   srcVZ = nodeVZ[srcTmp];
+            nodeX[srcTmp] += desX;  nodeVX[srcTmp] += desVX;
+            nodeY[srcTmp] += desY;  nodeVY[srcTmp] += desVY;
+            nodeZ[srcTmp] += desZ;  nodeVZ[srcTmp] += desVZ;
 
             n = srcTmp;
-            srcTmp = leafParent[srcTmp];
+            srcTmp = nodeParent[srcTmp];
           }
 
 
           if(!done && desTmp!=-1)
           {
-            leafParent[n] = desTmp;
+            nodeParent[n] = desTmp;
 
-            if(leafChildE[desTmp])  leafSibling[leafChildE[desTmp]] = n;
-            else  leafChildS[desTmp] = n;
-            leafChildE[desTmp] = n;
+            if(nodeChildE[desTmp])  nodeSibling[nodeChildE[desTmp]] = n;
+            else  nodeChildS[desTmp] = n;
+            nodeChildE[desTmp] = n;
 
-            leafI[desTmp] = (leafI[desTmp]<leafI[n]) ? leafI[desTmp] : leafI[n];
-            desCount = leafCount[desTmp];
-            leafCount[desTmp] += srcCount;
-            desX = leafX[desTmp];   desVX = leafVX[desTmp];
-            desY = leafY[desTmp];   desVY = leafVY[desTmp];
-            desZ = leafZ[desTmp];   desVZ = leafVZ[desTmp];
-            leafX[desTmp] += srcX;  leafVX[desTmp] += srcVX;
-            leafY[desTmp] += srcY;  leafVY[desTmp] += srcVY;
-            leafZ[desTmp] += srcZ;  leafVZ[desTmp] += srcVZ;
+            nodeI[desTmp] = (nodeI[desTmp]<nodeI[n]) ? nodeI[desTmp] : nodeI[n];
+            desCount = nodeCount[desTmp];
+            nodeCount[desTmp] += srcCount;
+            desX = nodeX[desTmp];   desVX = nodeVX[desTmp];
+            desY = nodeY[desTmp];   desVY = nodeVY[desTmp];
+            desZ = nodeZ[desTmp];   desVZ = nodeVZ[desTmp];
+            nodeX[desTmp] += srcX;  nodeVX[desTmp] += srcVX;
+            nodeY[desTmp] += srcY;  nodeVY[desTmp] += srcVY;
+            nodeZ[desTmp] += srcZ;  nodeVZ[desTmp] += srcVZ;
 
             n = desTmp;
-            desTmp = leafParent[desTmp];
+            desTmp = nodeParent[desTmp];
           }
           while(!done && desTmp!=-1)
           {
-            leafI[desTmp] = (leafI[desTmp]<leafI[n]) ? leafI[desTmp] : leafI[n];
-            desCount = leafCount[desTmp];
-            leafCount[desTmp] += srcCount;
-            desX = leafX[desTmp];   desVX = leafVX[desTmp];
-            desY = leafY[desTmp];   desVY = leafVY[desTmp];
-            desZ = leafZ[desTmp];   desVZ = leafVZ[desTmp];
-            leafX[desTmp] += srcX;  leafVX[desTmp] += srcVX;
-            leafY[desTmp] += srcY;  leafVY[desTmp] += srcVY;
-            leafZ[desTmp] += srcZ;  leafVZ[desTmp] += srcVZ;
+            nodeI[desTmp] = (nodeI[desTmp]<nodeI[n]) ? nodeI[desTmp] : nodeI[n];
+            desCount = nodeCount[desTmp];
+            nodeCount[desTmp] += srcCount;
+            desX = nodeX[desTmp];   desVX = nodeVX[desTmp];
+            desY = nodeY[desTmp];   desVY = nodeVY[desTmp];
+            desZ = nodeZ[desTmp];   desVZ = nodeVZ[desTmp];
+            nodeX[desTmp] += srcX;  nodeVX[desTmp] += srcVX;
+            nodeY[desTmp] += srcY;  nodeVY[desTmp] += srcVY;
+            nodeZ[desTmp] += srcZ;  nodeVZ[desTmp] += srcVZ;
 
             n = desTmp;
-            desTmp = leafParent[desTmp];
+            desTmp = nodeParent[desTmp];
           }
 
 					//-----------------------------------------------------
