@@ -34,7 +34,7 @@ public:
 	thrust::device_vector<int>   particleStartOfCubes;	// stratInd of cubes  (within particleId)
 
   thrust::device_vector<int>   cubeId; // for each particle, cube id
-  thrust::device_vector<int>   cubeMapping, cubeMappingInv; // mapping which seperates empty & nonempty cubes
+  thrust::device_vector<int>   cubeMapping; // array with only nonempty cubes
   thrust::device_vector<int>   sizeOfChunks;  // size of each chunk of cubes
   thrust::device_vector<int>   startOfChunks; // start of each chunk of cubes
 
@@ -107,7 +107,7 @@ public:
 
 			particleId.clear();	particleSizeOfCubes.clear(); particleStartOfCubes.clear();
 			edgesSrc.clear();	 edgesDes.clear(); edgesWeight.clear(); edgeSizeOfCubes.clear(); edgeStartOfCubes.clear();
-			cubeId.clear();	 cubeMapping.clear(); cubeMappingInv.clear();
+			cubeId.clear();	 cubeMapping.clear();
 			tmpIntArray.clear(); tmpNxt.clear(); tmpFree.clear(); sizeOfChunks.clear(); startOfChunks.clear();
 
 			std::cout << std::endl;
@@ -680,11 +680,10 @@ public:
     thrust::stable_sort_by_key(particleId.begin(), particleId.end(), cubeId.begin());
 	}
 
-//------------ TODO : implement in a better way
 	// for each cube, get the size & start of cube particles (in particleId array)
 	void getSizeAndStartOfCubes()
 	{
-		int num = (numOfParticles<numOfCubes) ? numOfParticles : numOfCubes;
+	  int num = (numOfParticles<numOfCubes) ? numOfParticles : numOfCubes;
 
 		cubeMapping.resize(num);
 		particleSizeOfCubes.resize(num);
@@ -696,11 +695,6 @@ public:
 		cubesEmpty    = numOfCubes - cubesNonEmpty;	
 
 		cubes = cubesNonEmpty; // get the cubes which should be considered
-
-		// get the mapping for nonempty cubes
-		cubeMappingInv.resize(numOfCubes);
-		thrust::fill(cubeMappingInv.begin(), cubeMappingInv.end(), -1);
-		thrust::scatter(CountingIterator(0), CountingIterator(0)+cubesNonEmpty, cubeMapping.begin(), cubeMappingInv.begin());
 
 		// get the size & start details for only non empty cubes
 		particleStartOfCubes.resize(cubesNonEmpty);
@@ -941,11 +935,10 @@ public:
 		tmpIntArray.resize(cubes);
 		thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
 				getNeighborDetails(thrust::raw_pointer_cast(&*cubeMapping.begin()),
-													 thrust::raw_pointer_cast(&*cubeMappingInv.begin()),
 													 thrust::raw_pointer_cast(&*particleSizeOfCubes.begin()),
 													 thrust::raw_pointer_cast(&*edgeSizeOfCubes.begin()),
 												   thrust::raw_pointer_cast(&*tmpIntArray.begin()),
-												   ite, side, cubesInX, cubesInY, cubesInZ));
+												   ite, side, cubesInX, cubesInY, cubesInZ, cubes));
 		setChunks(); // group cubes in to chunks
 		tmpIntArray.clear();
 	
@@ -964,20 +957,20 @@ public:
 	//for each cube, sum the number of particles in neighbor cubes & get the sum of non empty neighbor cubes
 	struct getNeighborDetails : public thrust::unary_function<int, void>
   {
-		int *cubeMapping, *cubeMappingInv;
+		int *cubeMapping;
 		int *particleSizeOfCubes;
 		int *tmpIntArray, *edgeSizeOfCubes;
 
 		int  ite, side;
-		int  cubesInX, cubesInY, cubesInZ;
+		int  cubesInX, cubesInY, cubesInZ, cubes;
 
 		__host__ __device__
-		getNeighborDetails(int *cubeMapping, int *cubeMappingInv, 
+		getNeighborDetails(int *cubeMapping,
 				int *particleSizeOfCubes, int *edgeSizeOfCubes, int *tmpIntArray, 
-				int ite, int side, int cubesInX, int cubesInY, int cubesInZ) : 
-				cubeMapping(cubeMapping), cubeMappingInv(cubeMappingInv), 
+				int ite, int side, int cubesInX, int cubesInY, int cubesInZ, int cubes) :
+				cubeMapping(cubeMapping),
 				particleSizeOfCubes(particleSizeOfCubes), edgeSizeOfCubes(edgeSizeOfCubes), tmpIntArray(tmpIntArray), 
-				ite(ite), side(side), cubesInX(cubesInX), cubesInY(cubesInY), cubesInZ(cubesInZ) {}
+				ite(ite), side(side), cubesInX(cubesInX), cubesInY(cubesInY), cubesInZ(cubesInZ), cubes(cubes) {}
 
     __host__ __device__
     void operator()(int i)
@@ -1008,7 +1001,19 @@ public:
 				if((currentX>=0 && currentX<cubesInX) && (currentY>=0 && currentY<cubesInY) && (currentZ>=0 && currentZ<cubesInZ))
 				{
 					cube_mapped = (currentZ*(cubesInY*cubesInX) + currentY*cubesInX + currentX);
-					cube = cubeMappingInv[cube_mapped];
+
+					int from = (i_mapped>cube_mapped) ? 0 : i+1;
+          int to   = (i_mapped>cube_mapped) ? i-1 : cubes-1;
+          while(to >= from)
+          {
+            int mid = from + ((to - from) / 2);
+            if (cubeMapping[mid] < cube_mapped)
+              from = mid + 1;
+            else if (cubeMapping[mid] > cube_mapped)
+              to = mid - 1;
+            else
+            { cube = mid; break; }
+          }
 				}
 
 				if(cube_mapped==-1 || cube==-1 || particleSizeOfCubes[i]==0 || particleSizeOfCubes[cube]==0) continue;
@@ -1114,12 +1119,11 @@ public:
 								 thrust::raw_pointer_cast(&*startOfChunks.begin()),
 								 thrust::raw_pointer_cast(&*sizeOfChunks.begin()),
 								 thrust::raw_pointer_cast(&*cubeMapping.begin()),
-								 thrust::raw_pointer_cast(&*cubeMappingInv.begin()),
                  thrust::raw_pointer_cast(&*leafX.begin()),
                  thrust::raw_pointer_cast(&*leafY.begin()),
                  thrust::raw_pointer_cast(&*leafZ.begin()),
 								 thrust::raw_pointer_cast(&*particleId.begin()),
-								 max_ll, min_ll, ite, cubesInX, cubesInY, cubesInZ, side,
+								 max_ll, min_ll, ite, cubesInX, cubesInY, cubesInZ, cubes, side,
 								 thrust::raw_pointer_cast(&*edgesSrc.begin()),
 	               thrust::raw_pointer_cast(&*edgesDes.begin()),
 	               thrust::raw_pointer_cast(&*edgesWeight.begin()),
@@ -1140,11 +1144,11 @@ public:
 		float *leafX, *leafY, *leafZ;
 
 		int   *startOfChunks, *sizeOfChunks;
-		int   *cubeMapping, *cubeMappingInv;
+		int   *cubeMapping;
 		int   *particleId, *particleStartOfCubes, *particleSizeOfCubes;
 
 		int    side;
-		int    cubesInX, cubesInY, cubesInZ;
+		int    cubesInX, cubesInY, cubesInZ, cubes;
 		
 		int   *edgesSrc, *edgesDes;
 		float *edgesWeight;
@@ -1153,18 +1157,18 @@ public:
 		__host__ __device__
 		getEdges(int *particleStartOfCubes, int *particleSizeOfCubes, 
 				int *startOfChunks, int *sizeOfChunks,
-				int *cubeMapping, int *cubeMappingInv,
+				int *cubeMapping,
 				float *leafX, float *leafY, float *leafZ,
 				int *particleId, float max_ll, float min_ll, int ite,
-				int cubesInX, int cubesInY, int cubesInZ, int side, 
+				int cubesInX, int cubesInY, int cubesInZ, int cubes, int side,
 				int *edgesSrc, int *edgesDes, float *edgesWeight,
 				int *edgeSizeOfCubes, int *edgeStartOfCubes) :
  				particleStartOfCubes(particleStartOfCubes), particleSizeOfCubes(particleSizeOfCubes),
 				startOfChunks(startOfChunks), sizeOfChunks(sizeOfChunks),
-				cubeMapping(cubeMapping), cubeMappingInv(cubeMappingInv),
+				cubeMapping(cubeMapping),
 				leafX(leafX), leafY(leafY), leafZ(leafZ),
 				particleId(particleId), max_ll(max_ll), min_ll(min_ll), ite(ite), 
-				cubesInX(cubesInX), cubesInY(cubesInY), cubesInZ(cubesInZ), side(side),
+				cubesInX(cubesInX), cubesInY(cubesInY), cubesInZ(cubesInZ), cubes(cubes), side(side),
 				edgesSrc(edgesSrc), edgesDes(edgesDes), edgesWeight(edgesWeight),
 				edgeSizeOfCubes(edgeSizeOfCubes), edgeStartOfCubes(edgeStartOfCubes) {}
 
@@ -1199,7 +1203,19 @@ public:
 					if((currentX>=0 && currentX<cubesInX) && (currentY>=0 && currentY<cubesInY) && (currentZ>=0 && currentZ<cubesInZ))
 					{
 						cube_mapped = (currentZ*(cubesInY*cubesInX) + currentY*cubesInX + currentX);
-						cube = cubeMappingInv[cube_mapped];
+
+						int from = (i_mapped>cube_mapped) ? 0 : l+1;
+            int to   = (i_mapped>cube_mapped) ? l-1 : cubes-1;
+            while(to >= from)
+            {
+              int mid = from + ((to - from) / 2);
+              if (cubeMapping[mid] < cube_mapped)
+                from = mid + 1;
+              else if (cubeMapping[mid] > cube_mapped)
+                to = mid - 1;
+              else
+              { cube = mid; break; }
+            }
 					}
 
 					if(cube_mapped==-1 || cube==-1 || particleSizeOfCubes[l]==0 || particleSizeOfCubes[cube]==0) continue;
