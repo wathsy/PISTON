@@ -2,11 +2,11 @@
 #ifndef PISTON_MATH
 #define PISTON_MATH
 
-//#if THRUST_DEVICE_BACKEND == THRUST_DEVICE_BACKEND_CUDA
+#if THRUST_DEVICE_BACKEND == THRUST_DEVICE_BACKEND_CUDA
 
-//#include "cuda_runtime.h"
+#include "cuda_runtime.h"
 
-//#else
+#else
 
 #include <thrust/detail/config.h>
 
@@ -42,7 +42,7 @@ static __inline__ __host__ __device__ uint3 make_uint3(unsigned int x, unsigned 
   uint3 t; t.x = x; t.y = y; t.z = z; return t;
 }
 
-//#endif
+#endif
 
 
 static __inline__ __host__ __device__ float3 make_float3(float4 a)

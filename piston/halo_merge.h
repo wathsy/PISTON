@@ -101,9 +101,9 @@ public:
 
 			std::cout << "-- globalStep done" << std::endl;
 
-			checkValidMergeTree();
+			//checkValidMergeTree();
 			getSizeOfMergeTree();
-			writeMergeTreeToFile(filename);
+			//writeMergeTreeToFile(filename);
 
 			particleId.clear();	particleSizeOfCubes.clear(); particleStartOfCubes.clear();
 			edgesSrc.clear();	 edgesDes.clear(); edgesWeight.clear(); edgeSizeOfCubes.clear(); edgeStartOfCubes.clear();
