@@ -14,20 +14,20 @@ class halo_merge : public halo
 {
 public:
 	float cubeLen;					// length of the cube
-	double max_ll, min_ll;   // maximum & minimum linking lengths
+	double max_ll, min_ll;  // maximum & minimum linking lengths
 	
 	float totalTime; 				// total time taken for halo finding
 
-	int mergetreeSize;      // total size of the global merge tree
-  int numOfEdges;         // total number of edges in space
+	unsigned int mergetreeSize;   // total size of the global merge tree
+	unsigned int numOfEdges;      // total number of edges in space
 
-	int  side, size, ite; 	// variable needed to determine the neighborhood cubes
+  unsigned int side, size, ite; // variable needed to determine the neighborhood cubes
 
-	unsigned int  numOfCubes;					 // total number of cubes in space
-	int  cubesNonEmpty, cubesEmpty;		 // total number of nonempty & empty cubes in space
-	int  cubesInX, cubesInY, cubesInZ; // number of cubes in each dimension
+	unsigned int numOfCubes;			// total number of cubes in space
+	unsigned int cubesNonEmpty, cubesEmpty;     // total number of nonempty & empty cubes in space
+	unsigned int  cubesInX, cubesInY, cubesInZ; // number of cubes in each dimension
 
-	int cubes, chunks; // amount of chunks & cube sizes used in computation steps, usually cubes is equal to cubesNonEmpty
+	unsigned int cubes, chunks; // amount of chunks & cube sizes used in computation steps, usually cubes is equal to cubesNonEmpty
 	
   thrust::device_vector<int>   particleId; 						// for each particle, particle id
 	thrust::device_vector<int>   particleSizeOfCubes; 	// number of particles in cubes
@@ -101,9 +101,9 @@ public:
 
 			std::cout << "-- globalStep done" << std::endl;
 
-			//checkValidMergeTree();
+			checkValidMergeTree();
 			getSizeOfMergeTree();
-			//writeMergeTreeToFile(filename);
+			writeMergeTreeToFile(filename);
 
 			particleId.clear();	particleSizeOfCubes.clear(); particleStartOfCubes.clear();
 			edgesSrc.clear();	 edgesDes.clear(); edgesWeight.clear(); edgeSizeOfCubes.clear(); edgeStartOfCubes.clear();
@@ -456,6 +456,7 @@ public:
 
       int offset = 0;
       for(int i=0; i<2*cubes; i++)
+        if(nodeValue[i]==min_ll)
       {
         if(nodeI[i]!=-1)
         {
@@ -692,7 +693,7 @@ public:
 		new_end = thrust::reduce_by_key(cubeId.begin(), cubeId.end(), ConstantIterator(1), cubeMapping.begin(), particleSizeOfCubes.begin());
 
 		cubesNonEmpty = thrust::get<0>(new_end) - cubeMapping.begin();
-		cubesEmpty    = numOfCubes - cubesNonEmpty;	
+		cubesEmpty    = (numOfCubes - cubesNonEmpty);
 
 		cubes = cubesNonEmpty; // get the cubes which should be considered
 
