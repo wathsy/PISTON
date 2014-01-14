@@ -26,6 +26,7 @@
 #include <thrust/iterator/constant_iterator.h>
 
 #include <piston/kd.h>
+#include <piston/piston_math.h>
 
 #include <sys/time.h>
 #include <sstream>
