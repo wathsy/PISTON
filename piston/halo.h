@@ -573,7 +573,7 @@ public:
     numOfHalos = 0;
     
     haloIndex.resize(numOfParticles);
-		thrust::copy(CountingIterator(0), CountingIterator(0)+numOfParticles, haloIndex.begin());
+    thrust::sequence(haloIndex.begin(), haloIndex.end(), 0);
   }
 
   // set colors to halos
