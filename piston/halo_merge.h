@@ -763,8 +763,6 @@ public:
     binSize = cubesInX;
     bins = std::ceil((double)numOfCubes/binSize);
 
-    std::cout << std::endl << "bins " << std::ceil((double)numOfCubes/n) << " binSize " << binSize << std::endl;
-
     binStart.resize(std::ceil((double)numOfCubes/binSize));
     thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
         setBins(thrust::raw_pointer_cast(&*cubeMapping.begin()),
@@ -790,21 +788,20 @@ public:
 //    thrust::fill(edgeSizeOfCubes.begin(), edgeSizeOfCubes.end(), ite);
 //    thrust::exclusive_scan(edgeSizeOfCubes.begin(), edgeSizeOfCubes.begin()+cubes, edgeStartOfCubes.begin());
 //--------------------------------------------
+
     edgeSizeOfCubes.resize(cubes);
     edgeStartOfCubes.resize(cubes);
 
-    tmpIntArray.resize(cubes);
     // for each cube, get neighbor details
     thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
         getNeighborDetails(thrust::raw_pointer_cast(&*cubeMapping.begin()),
                            thrust::raw_pointer_cast(&*binStart.begin()),
                            thrust::raw_pointer_cast(&*particleSizeOfCubes.begin()),
                            thrust::raw_pointer_cast(&*edgeSizeOfCubes.begin()),
-                           thrust::raw_pointer_cast(&*tmpIntArray.begin()),
                            ite, side, cubesInX, cubesInY, cubesInZ, cubes, binSize, bins));
+
     //set chunks for load balance
     setChunks();
-    tmpIntArray.clear();
 
     // for each cube, set the space required for storing edges
     thrust::exclusive_scan(edgeSizeOfCubes.begin(), edgeSizeOfCubes.begin()+cubes, edgeStartOfCubes.begin());
@@ -816,6 +813,7 @@ public:
     edgesWeight.resize(numOfEdges);
 
     std::cout << std::endl << "numOfEdges before " << numOfEdges << std::endl;
+
 //--------------------------------------------
   }
 
@@ -857,7 +855,7 @@ public:
   {
     unsigned int *cubeMapping;
     int *particleSizeOfCubes;
-    int *tmpIntArray, *edgeSizeOfCubes;
+    int *edgeSizeOfCubes;
 
     int  binSize, bins;
     int *binStart;
@@ -867,10 +865,10 @@ public:
 
     __host__ __device__
     getNeighborDetails(unsigned int *cubeMapping, int *binStart, int *particleSizeOfCubes,
-        int *edgeSizeOfCubes, int *tmpIntArray, int ite, int side,
+        int *edgeSizeOfCubes, int ite, int side,
         int cubesInX, int cubesInY, int cubesInZ, int cubes, int binSize, int bins) :
         cubeMapping(cubeMapping), binStart(binStart), particleSizeOfCubes(particleSizeOfCubes),
-        edgeSizeOfCubes(edgeSizeOfCubes), tmpIntArray(tmpIntArray), ite(ite), side(side),
+        edgeSizeOfCubes(edgeSizeOfCubes), ite(ite), side(side),
         cubesInX(cubesInX), cubesInY(cubesInY), cubesInZ(cubesInZ), cubes(cubes), binSize(binSize), bins(bins) {}
 
     __host__ __device__
@@ -886,7 +884,6 @@ public:
       int len = (side-1)/2;
 
       int sumNonEmptyCubes = 0;
-      int sumParticles = 0;
 
       for(int num=0; num<ite; num++)
       {
@@ -927,10 +924,8 @@ public:
         if(cube_mapped==-1 || cube==-1) continue;
 
         sumNonEmptyCubes++;  //sum the non empty neighbor cubes
-        sumParticles += particleSizeOfCubes[cube]; // sum the number of particles in neighbor cubes
       }
 
-      tmpIntArray[i] = (sumParticles*particleSizeOfCubes[i]); // store number of comparisons for this cube
       edgeSizeOfCubes[i] = sumNonEmptyCubes; // store sum of non empty neighbor cubes for this cube
     }
   };
@@ -1278,7 +1273,7 @@ public:
     // iteratively combine the cubes two at a time
     while(cubes!=cubesOld && cubes>0)
     {
-      struct timeval begin, mid1, mid2, mid3, end, diff, diff1, diff2, diff3, diff4;
+      struct timeval begin, mid1, mid2, mid3, mid4, end, diff, diff1, diff2, diff3, diff4, diff5;
       gettimeofday(&begin, 0);
       thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
         combineFreeLists(thrust::raw_pointer_cast(&*tmpNxt.begin()),
@@ -1308,16 +1303,22 @@ public:
                           thrust::raw_pointer_cast(&*edgeSizeOfCubes.begin()),
                           min_ll, sizeP, cubesOri));
       gettimeofday(&mid2, 0);
-      thrust::for_each(CountingIterator(0), CountingIterator(0)+numOfParticles,
-          jumpLeafPointers(thrust::raw_pointer_cast(&*leafParent.begin()),
-                           thrust::raw_pointer_cast(&*nodeParent.begin()),
-                           thrust::raw_pointer_cast(&*nodeCount.begin()),
-                           thrust::raw_pointer_cast(&*nodeValue.begin())));
-      gettimeofday(&mid3, 0);
       thrust::for_each(CountingIterator(0), CountingIterator(0)+2*cubesOri,
           jumpNodePointers(thrust::raw_pointer_cast(&*nodeParent.begin()),
                            thrust::raw_pointer_cast(&*nodeCount.begin()),
                            thrust::raw_pointer_cast(&*nodeValue.begin())));
+      gettimeofday(&mid3, 0);
+      thrust::for_each(CountingIterator(0), CountingIterator(0)+numOfParticles,
+          jumpLeafPointers(thrust::raw_pointer_cast(&*leafParent.begin()),
+                           thrust::raw_pointer_cast(&*nodeParent.begin()),
+                           thrust::raw_pointer_cast(&*nodeValue.begin())));
+      gettimeofday(&mid4, 0);
+      thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
+          freeNodes(thrust::raw_pointer_cast(&*tmpNxt.begin()),
+                    thrust::raw_pointer_cast(&*tmpFree.begin()),
+                    thrust::raw_pointer_cast(&*nodeParent.begin()),
+                    thrust::raw_pointer_cast(&*nodeCount.begin()),
+                    sizeP, cubesOri));
       gettimeofday(&end, 0);
 
 //      std::cout << std::endl;
@@ -1331,9 +1332,12 @@ public:
 //      timersub(&mid3, &mid2, &diff3);
 //      float seconds3 = diff3.tv_sec + 1.0E-6*diff3.tv_usec;
 //      std::cout << "Time elapsed2: " << seconds3 << " s for jumpLeafPointers" << std::endl << std::flush;
-//      timersub(&end, &mid3, &diff4);
+//      timersub(&mid4, &mid3, &diff4);
 //      float seconds4 = diff4.tv_sec + 1.0E-6*diff4.tv_usec;
 //      std::cout << "Time elapsed3: " << seconds4 << " s for jumpNodePointers" << std::endl << std::flush;
+//      timersub(&end, &mid4, &diff4);
+//      float seconds5 = diff5.tv_sec + 1.0E-6*diff5.tv_usec;
+//      std::cout << "Time elapsed4: " << seconds5 << " s for freeNodes" << std::endl << std::flush;
 
       timersub(&end, &begin, &diff);
       float seconds = diff.tv_sec + 1.0E-6*diff.tv_usec;
@@ -1446,7 +1450,8 @@ public:
           float eWeight = edgesWeight[j];
 
           if(!(cubeId[eSrc]>=cubeStartM && cubeId[eSrc]<=cubeEndM) ||
-             !(cubeId[eDes]>=cubeStartM && cubeId[eDes]<=cubeEndM))
+             !(cubeId[eDes]>=cubeStartM && cubeId[eDes]<=cubeEndM) ||
+             (tmpNxt[cubeStart]==-1))
           {
             edgesSrc[edgeStartOfCubes[k] + size] = eSrc;
             edgesDes[edgeStartOfCubes[k] + size] = eDes;
@@ -1636,35 +1641,10 @@ public:
     }
   };
 
-  // jump leaf's parent pointers
-  struct jumpLeafPointers : public thrust::unary_function<int, void>
-  {
-    int   *leafParent, *nodeParent;
-    int   *nodeCount;
-    float *nodeValue;
-
-    __host__ __device__
-    jumpLeafPointers(int *leafParent, int *nodeParent, int *nodeCount, float *nodeValue) :
-      leafParent(leafParent), nodeParent(nodeParent), nodeCount(nodeCount), nodeValue(nodeValue) {}
-
-    __host__ __device__
-    bool operator()(int i)
-    {
-      int tmp = leafParent[i];
-
-      while(tmp!=-1 && nodeParent[tmp]!=-1 && nodeValue[tmp]==nodeValue[nodeParent[tmp]])
-      {
-        leafParent[i] = nodeParent[tmp]; //jump a pointer
-        tmp = nodeParent[tmp]; // continue
-      }
-    }
-  };
-
   // jump node's parent pointers
   struct jumpNodePointers : public thrust::unary_function<int, void>
   {
-    int   *nodeParent;
-    int   *nodeCount;
+    int   *nodeParent, *nodeCount;
     float *nodeValue;
 
     __host__ __device__
@@ -1676,14 +1656,72 @@ public:
     {
       int tmp = nodeParent[i];
 
+      if(nodeValue[i]!=0 && nodeValue[i]==nodeValue[tmp])
+        nodeCount[i] = -1; // set this node as free
+
       while(tmp!=-1 && nodeParent[tmp]!=-1 && nodeValue[tmp]==nodeValue[nodeParent[tmp]])
-      {
-        nodeParent[i] = nodeParent[tmp]; //jump a pointer
         tmp = nodeParent[tmp]; // continue
-      }
+
+      nodeParent[i] = tmp; //jump pointers
     }
   };
 
+  // jump leaf's parent pointers
+  struct jumpLeafPointers : public thrust::unary_function<int, void>
+  {
+    int   *leafParent, *nodeParent;
+    float *nodeValue;
+
+    __host__ __device__
+    jumpLeafPointers(int *leafParent, int *nodeParent, float *nodeValue) :
+      leafParent(leafParent), nodeParent(nodeParent), nodeValue(nodeValue) {}
+
+    __host__ __device__
+    bool operator()(int i)
+    {
+      int tmp = leafParent[i];
+
+      while(tmp!=-1 && nodeParent[tmp]!=-1 && nodeValue[tmp]==nodeValue[nodeParent[tmp]])
+        tmp = nodeParent[tmp]; // continue
+
+      leafParent[i] = tmp; //jump pointers
+    }
+  };
+
+  // free nodes
+  struct freeNodes : public thrust::unary_function<int, void>
+  {
+    int  sizeP, numOfCubesOri;
+
+    int *tmpNxt, *tmpFree;
+
+    int *nodeParent;
+    int *nodeCount;
+
+    __host__ __device__
+    freeNodes(int *tmpNxt, int *tmpFree, int *nodeParent, int *nodeCount, int sizeP, int numOfCubesOri) :
+        tmpNxt(tmpNxt), tmpFree(tmpFree), nodeParent(nodeParent), nodeCount(nodeCount), sizeP(sizeP), numOfCubesOri(numOfCubesOri) {}
+
+    __host__ __device__
+    bool operator()(int i)
+    {
+      int cubeStart  = sizeP*i;
+      int cubeEnd    = (sizeP*(i+1)<=numOfCubesOri) ? sizeP*(i+1) : numOfCubesOri;
+
+      for(int k=2*cubeStart; k<2*cubeEnd; k++)
+      {
+        if(nodeCount[k]==-1) // set node as free
+        {
+          int tmpVal = tmpNxt[cubeStart];
+          tmpNxt[cubeStart] = k;
+          tmpFree[tmpNxt[cubeStart]] = tmpVal;
+
+          nodeCount[k] = 0;
+          nodeParent[k] = -1;
+        }
+      }
+    }
+  };
 
 
   //------- output results
