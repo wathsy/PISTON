@@ -1241,7 +1241,7 @@ public:
       i++;
 
       // set new number of cubes & sizeP
-      if((cubes/k)>=1)
+      if(cubes != (int)std::ceil(((double)cubes/k)))
       {
         sizeP *= k;
         cubesOld = cubes;
