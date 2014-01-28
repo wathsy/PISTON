@@ -28,7 +28,11 @@ struct compare
 	__host__ __device__
 	void operator()(int i)
 	{
-		if(a[i] != b[i]) c[i] = 1;
+		if(a[i] != b[i])
+    {
+      c[i] = 1;
+      //std::cout << i << " " << a[i] << " " << b[i] << std::endl;
+    }
 	}
 };
 
@@ -135,12 +139,12 @@ void compareResultsAscii(string filename, int numOfParticles, thrust::device_vec
 
 int main(int argc, char* argv[])
 {
-	if (argc < 10)
+	if (argc < 11)
 	{
 		std::cout << "Usage:" << std::endl;
-		std::cout << "haloGPU filename format min_ll max_ll l_length p_size np rL n" << std::endl;
+		std::cout << "haloGPU filename format min_ll max_ll l_length p_size np rL n k " << std::endl;
 		std::cout << "OR" << std::endl;
-		std::cout << "haloOMP filename format min_ll max_ll l_length p_size np rL n \n" << std::endl;
+		std::cout << "haloOMP filename format min_ll max_ll l_length p_size np rL n k\n" << std::endl;
 		return 1;
 	}
 
@@ -159,11 +163,12 @@ int main(int argc, char* argv[])
 
 	// np - 128 & rL -150 for .hcosmo file
 	// np - 256 & rL -64  for .cosmo file
-  int   np = atoi(argv[7]); // number of particles in one dimension
-  float rL = atof(argv[8]); // box length at a side
-  int   n  = atoi(argv[9]); // if you want a fraction of the file to load, use this.. 1/n
-	
-  std::cout << "min_linkLength " << min_linkLength << std::endl;
+  int   np = atoi(argv[7]);  // number of particles in one dimension
+  float rL = atof(argv[8]);  // box length at a side
+  int   n  = atoi(argv[9]);  // if you want a fraction of the file to load, use this.. 1/n
+	int   k  = atoi(argv[10]); // k-way merge for global step in dendogram based halo finder
+
+	std::cout << "min_linkLength " << min_linkLength << std::endl;
   std::cout << "max_linkLength " << max_linkLength << std::endl;
   std::cout << "linkLength " << linkLength << std::endl;
   std::cout << "particleSize " << particleSize << std::endl;
@@ -192,7 +197,7 @@ int main(int argc, char* argv[])
 
   std::cout << "Merge tree based result" << std::endl;
 
-  halo = new halo_merge(min_linkLength, max_linkLength, filename, format, n, np, rL);
+  halo = new halo_merge(min_linkLength, max_linkLength, k, filename, format, n, np, rL);
   (*halo)(linkLength, particleSize);
   thrust::device_vector<int> d = halo->getHalos();
 
