@@ -192,7 +192,7 @@ int main(int argc, char* argv[])
 
   std::cout << "Merge tree based result" << std::endl;
 
-  halo = new halo_merge(min_linkLength, max_linkLength, filename, format, n, np, rL);
+  halo = new halo_merge(min_linkLength, max_linkLength, filename, k, format, n, np, rL);
   (*halo)(linkLength, particleSize);
   thrust::device_vector<int> d = halo->getHalos();
 

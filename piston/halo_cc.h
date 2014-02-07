@@ -361,6 +361,7 @@ public:
               for (unsigned int j=start_index; j<end_index; j++)
               {
                 float3 pj = make_float3(X[j], Y[j], Z[j]);
+
                 if ((pi.x-pj.x)*(pi.x-pj.x) + (pi.y-pj.y)*(pi.y-pj.y) + (pi.z-pj.z)*(pi.z-pj.z) < t)
                 {
                   if ((D[i] == D[D[i]]) && (D[j] < D[i]))
