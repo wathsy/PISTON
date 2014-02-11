@@ -685,9 +685,45 @@ public:
   // locally, create the local merge trees for each cube
   void localStep()
   {
-    struct timeval begin, mid1, mid2, mid3, mid4, mid5, end, diff1, diff2, diff3, diff4, diff5, diff6;
 
+//----------------------
+
+thrust::device_vector<int> a(10);
+thrust::sequence(a.begin(), a.end(), 5);
+thrust::counting_iterator<int> search_begin(0);
+thrust::device_vector<int> bucket_begin(10);
+thrust::device_vector<int> bucket_end(10);
+thrust::lower_bound(a.begin(), a.end(), search_begin, search_begin + 10, bucket_begin.begin());
+thrust::upper_bound(a.begin(), a.end(), search_begin, search_begin + 10, bucket_end.begin());
+
+std::cout << "a               "; thrust::copy(a.begin(), a.begin()+10, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
+std::cout << "search_begin    "; thrust::copy(search_begin, search_begin+10, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
+std::cout << "bucket_begin    "; thrust::copy(bucket_begin.begin(), bucket_begin.begin()+10, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
+std::cout << "bucket_end      "; thrust::copy(bucket_end.begin(), bucket_end.begin()+10, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
+
+//----------------------
+
+    struct timeval begin, mid1, mid2, mid3, mid4, mid5, end, diff1, diff2, diff3, diff4, diff5, diff6;
     gettimeofday(&begin, 0);
+
+    thrust::device_vector<long long> tmp, tmp1, tmp2;
+    tmp.resize(cubes);
+    tmp1.resize(cubes);
+    tmp2.resize(cubes);
+    for(int i=0; i<ite; i++)
+    {
+      //get cube id to compare
+      thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
+          getNeighborcube(thrust::raw_pointer_cast(&*cubeMapping.begin()),
+                          thrust::raw_pointer_cast(&*tmp.begin()),
+                          ite, side, cubesInX, cubesInY, cubesInZ));
+      //check if cube is not empty (get both lower_bound & upper_bound)
+      thrust::lower_bound(cubeMapping.begin(), cubeMapping.end(), tmp.begin(), tmp.end(), tmp1.begin());
+      thrust::upper_bound(cubeMapping.begin(), cubeMapping.end(), tmp.begin(), tmp.end(), tmp2.begin());
+      //compare particles to see if edge exists
+    }
+
+    gettimeofday(&mid1, 0);
 
     // set bins
     binSize = cubesInX;
@@ -699,11 +735,10 @@ public:
                 binSize));
     std::cout << std::endl << "bins " << bins << " binSize " << binSize << std::endl;
 
-    gettimeofday(&mid1, 0);
-
     // for each cube, get neighbor details
     edgeSizeOfCubes.resize(cubes);
     edgeStartOfCubes.resize(cubes);
+
     thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
         getNeighborDetails(thrust::raw_pointer_cast(&*cubeMapping.begin()),
                            thrust::raw_pointer_cast(&*binStart.begin()),
@@ -806,6 +841,53 @@ public:
     float seconds6 = diff6.tv_sec + 1.0E-6*diff6.tv_usec;
     std::cout << "Time elapsed5: " << seconds6 << " s for createSubMergeTree" << std::endl << std::flush;
   }
+
+  struct getNeighborcube: public thrust::unary_function<int, void>
+  {
+    long long *tmp;
+    unsigned long long *cubeMapping;
+
+    unsigned long long  ite, side;
+    unsigned long long  cubesInX, cubesInY, cubesInZ;
+
+    float *leafX, *leafY, *leafZ;
+
+    unsigned long long *particleStartOfCubes;
+
+    __host__ __device__
+    getNeighborcube(unsigned long long *cubeMapping, long long *tmp, unsigned long long ite, unsigned long long side,
+        unsigned long long cubesInX, unsigned long long cubesInY, unsigned long long cubesInZ) :
+        cubeMapping(cubeMapping), tmp(tmp), ite(ite), side(side),
+        cubesInX(cubesInX), cubesInY(cubesInY), cubesInZ(cubesInZ) {}
+
+    __host__ __device__
+    void operator()(int i)
+    {
+      unsigned long long i_mapped = cubeMapping[i];
+
+      // get x,y,z coordinates for the cube
+      const int x =  i_mapped % cubesInX;
+      const int y = (i_mapped / cubesInX) % cubesInY;
+      const int z =  i_mapped / (cubesInX*cubesInY);
+
+      int len = (side-1)/2;
+
+      const int x1 =  ite % side;
+      const int y1 = (ite / side) % side;
+      const int z1 =  ite / (side*side);
+
+      // get x,y,z coordinates for the current cube
+      int currentX = x - len + x1;
+      int currentY = y - len + y1;
+      int currentZ = z - len + z1;
+
+      long long cube_mapped = -1;
+      if((currentX>=0 && currentX<cubesInX) && (currentY>=0 && currentY<cubesInY) && (currentZ>=0 && currentZ<cubesInZ))
+        cube_mapped = currentX  + currentY*cubesInX + currentZ*(cubesInY*cubesInX);
+
+      tmp[i] = cube_mapped;
+    }
+  };
 
   // for each bin, set the cubeStart in cubeMapping
   struct setBins : public thrust::unary_function<int, void>
