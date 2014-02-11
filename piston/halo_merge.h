@@ -46,7 +46,7 @@ public:
   thrust::device_vector<int>   edgeSizeOfCubes;                   // size of edges in cubes
   thrust::device_vector<int>   edgeStartOfCubes;                  // start of edges in cubes
 
-  thrust::device_vector<unsigned long long> tmpNxt, tmpFree;      // stores details of free items in merge tree
+  thrust::device_vector<long long> tmpNxt, tmpFree;               // stores details of free items in merge tree
 
   // stores parent & parentS details for leafs in the merge tree
   thrust::device_vector<int>   leafParent, leafParentS;           // parent & parentS of each leaf
@@ -623,6 +623,7 @@ public:
     chunks = cubes - thrust::count(startOfChunks.begin(), startOfChunks.begin()+cubes, -1);
 
     sizeOfChunks.clear();
+    startOfChunks.resize(chunks);
 
     std::cout << "maxChunkSize " << maxChunkSize << " chunks " << chunks << std::endl;
   }
@@ -684,13 +685,48 @@ public:
   // locally, create the local merge trees for each cube
   void localStep()
   {
-    struct timeval begin, mid1, mid2, mid3, end, diff1, diff2, diff3, diff4;
+    struct timeval begin, mid1, mid2, mid3, mid4, mid5, end, diff1, diff2, diff3, diff4, diff5, diff6;
 
     gettimeofday(&begin, 0);
 
-    initArrays(); // init arrays needed for storing edges
+    // set bins
+    binSize = cubesInX;
+    bins = cubesInY*cubesInZ;
+    binStart.resize(bins);
+    thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
+        setBins(thrust::raw_pointer_cast(&*cubeMapping.begin()),
+                thrust::raw_pointer_cast(&*binStart.begin()),
+                binSize));
+    std::cout << std::endl << "bins " << bins << " binSize " << binSize << std::endl;
 
     gettimeofday(&mid1, 0);
+
+    // for each cube, get neighbor details
+    edgeSizeOfCubes.resize(cubes);
+    edgeStartOfCubes.resize(cubes);
+    thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
+        getNeighborDetails(thrust::raw_pointer_cast(&*cubeMapping.begin()),
+                           thrust::raw_pointer_cast(&*binStart.begin()),
+                           thrust::raw_pointer_cast(&*edgeSizeOfCubes.begin()),
+                           thrust::raw_pointer_cast(&*particleStartOfCubes.begin()),
+                           thrust::raw_pointer_cast(&*leafX.begin()),
+                           thrust::raw_pointer_cast(&*leafY.begin()),
+                           thrust::raw_pointer_cast(&*leafZ.begin()),
+                           ite, side, numOfParticles, max_ll, cubesInX, cubesInY, cubesInZ, cubes, binSize, bins));
+
+    gettimeofday(&mid2, 0);
+
+    // for each cube, set the space required for storing edges
+    thrust::exclusive_scan(edgeSizeOfCubes.begin(), edgeSizeOfCubes.end(), edgeStartOfCubes.begin());
+    numOfEdges = edgeStartOfCubes[cubes-1] + edgeSizeOfCubes[cubes-1]; // size of edges array
+
+    // init edge arrays
+    edgesSrc.resize(numOfEdges);
+    edgesDes.resize(numOfEdges);
+    edgesWeight.resize(numOfEdges);
+    std::cout << std::endl << "numOfEdges " << numOfEdges << std::endl; // set the correct number of edges
+
+    gettimeofday(&mid3, 0);
 
     // for each cube, get the set of edges
     thrust::for_each(CountingIterator(0), CountingIterator(0)+chunks,
@@ -707,10 +743,8 @@ public:
                  thrust::raw_pointer_cast(&*edgesWeight.begin()),
                  thrust::raw_pointer_cast(&*edgeSizeOfCubes.begin()),
                  thrust::raw_pointer_cast(&*edgeStartOfCubes.begin())));
-    numOfEdges = thrust::reduce(edgeSizeOfCubes.begin(), edgeSizeOfCubes.begin()+cubes); // set the correct number of edges
-    std::cout << "numOfEdges after " << numOfEdges << std::endl;
 
-    gettimeofday(&mid2, 0);
+    gettimeofday(&mid4, 0);
 
     // set vectors necessary for merge tree construction
     tmpNxt.resize(cubes);
@@ -720,7 +754,7 @@ public:
         initNxt(thrust::raw_pointer_cast(&*tmpNxt.begin()),
                 thrust::raw_pointer_cast(&*tmpFree.begin())));
 
-    gettimeofday(&mid3, 0);
+    gettimeofday(&mid5, 0);
 
     // set local merge trees for each cube
     thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
@@ -755,53 +789,22 @@ public:
     std::cout << "'localStep' Time division:" << std::endl << std::flush;
     timersub(&mid1, &begin, &diff1);
     float seconds1 = diff1.tv_sec + 1.0E-6*diff1.tv_usec;
-    std::cout << "Time elapsed0: " << seconds1 << " s for initArrays" << std::endl << std::flush;
+    std::cout << "Time elapsed0: " << seconds1 << " s for initBins" << std::endl << std::flush;
     timersub(&mid2, &mid1, &diff2);
     float seconds2 = diff2.tv_sec + 1.0E-6*diff2.tv_usec;
-    std::cout << "Time elapsed1: " << seconds2 << " s for getEdges" << std::endl << std::flush;
+    std::cout << "Time elapsed1: " << seconds2 << " s for getNeighborDetails" << std::endl << std::flush;
     timersub(&mid3, &mid2, &diff3);
     float seconds3 = diff3.tv_sec + 1.0E-6*diff3.tv_usec;
-    std::cout << "Time elapsed2: " << seconds3 << " s for initNxt" << std::endl << std::flush;
-    timersub(&end, &mid3, &diff4);
+    std::cout << "Time elapsed2: " << seconds3 << " s for initEdgeArrays" << std::endl << std::flush;
+    timersub(&mid4, &mid3, &diff4);
     float seconds4 = diff4.tv_sec + 1.0E-6*diff4.tv_usec;
-    std::cout << "Time elapsed3: " << seconds4 << " s for createSubMergeTree" << std::endl << std::flush;
-  }
-
-  // for each cube, init arrays needed for storing edges
-  void initArrays()
-  {
-    // set bins
-    binSize = cubesInX;
-    bins = cubesInY*cubesInZ;
-
-    binStart.resize(bins);
-    thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
-        setBins(thrust::raw_pointer_cast(&*cubeMapping.begin()),
-                thrust::raw_pointer_cast(&*binStart.begin()),
-                binSize));
-
-    std::cout << std::endl << "bins " << bins << " binSize " << binSize << std::endl;
-
-    edgeSizeOfCubes.resize(cubes);
-    edgeStartOfCubes.resize(cubes);
-
-    // for each cube, get neighbor details
-    thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
-        getNeighborDetails(thrust::raw_pointer_cast(&*cubeMapping.begin()),
-                           thrust::raw_pointer_cast(&*binStart.begin()),
-                           thrust::raw_pointer_cast(&*edgeSizeOfCubes.begin()),
-                           ite, side, cubesInX, cubesInY, cubesInZ, cubes, binSize, bins));
-
-    // for each cube, set the space required for storing edges
-    thrust::exclusive_scan(edgeSizeOfCubes.begin(), edgeSizeOfCubes.begin()+cubes, edgeStartOfCubes.begin());
-    numOfEdges = edgeStartOfCubes[cubes-1] + edgeSizeOfCubes[cubes-1]; // size of edges array
-
-    // init edge arrays
-    edgesSrc.resize(numOfEdges);
-    edgesDes.resize(numOfEdges);
-    edgesWeight.resize(numOfEdges);
-
-    std::cout << std::endl << "numOfEdges before " << numOfEdges << std::endl;
+    std::cout << "Time elapsed3: " << seconds4 << " s for getEdges" << std::endl << std::flush;
+    timersub(&mid5, &mid4, &diff5);
+    float seconds5 = diff5.tv_sec + 1.0E-6*diff5.tv_usec;
+    std::cout << "Time elapsed4: " << seconds5 << " s for initNxt" << std::endl << std::flush;
+    timersub(&end, &mid5, &diff6);
+    float seconds6 = diff6.tv_sec + 1.0E-6*diff6.tv_usec;
+    std::cout << "Time elapsed5: " << seconds6 << " s for createSubMergeTree" << std::endl << std::flush;
   }
 
   // for each bin, set the cubeStart in cubeMapping
@@ -841,16 +844,28 @@ public:
     unsigned long long  binSize, bins;
     unsigned long long *binStart;
 
+    double max_ll;
+    int numOfParticles;
     unsigned long long  ite, side;
     unsigned long long  cubesInX, cubesInY, cubesInZ, cubes;
 
+    float *leafX, *leafY, *leafZ;
+
+    unsigned long long *particleStartOfCubes;
+
     __host__ __device__
     getNeighborDetails(unsigned long long *cubeMapping, unsigned long long *binStart,
-        int *edgeSizeOfCubes, unsigned long long ite, unsigned long long side,
-        unsigned long long cubesInX, unsigned long long cubesInY, unsigned long long cubesInZ, unsigned long long cubes, unsigned long long binSize, unsigned long long bins) :
+        int *edgeSizeOfCubes, unsigned long long *particleStartOfCubes,
+        float *leafX, float *leafY, float *leafZ,
+        unsigned long long ite, unsigned long long side, int numOfParticles, double max_ll,
+        unsigned long long cubesInX, unsigned long long cubesInY, unsigned long long cubesInZ,
+        unsigned long long cubes, unsigned long long binSize, unsigned long long bins) :
         cubeMapping(cubeMapping), binStart(binStart),
-        edgeSizeOfCubes(edgeSizeOfCubes), ite(ite), side(side),
-        cubesInX(cubesInX), cubesInY(cubesInY), cubesInZ(cubesInZ), cubes(cubes), binSize(binSize), bins(bins) {}
+        edgeSizeOfCubes(edgeSizeOfCubes), particleStartOfCubes(particleStartOfCubes),
+        leafX(leafX), leafY(leafY), leafZ(leafZ),
+        ite(ite), side(side), numOfParticles(numOfParticles), max_ll(max_ll),
+        cubesInX(cubesInX), cubesInY(cubesInY), cubesInZ(cubesInZ), cubes(cubes),
+        binSize(binSize), bins(bins) {}
 
     __host__ __device__
     void operator()(int i)
@@ -865,44 +880,68 @@ public:
       int len = (side-1)/2;
 
       int sumNonEmptyCubes = 0;
-      for(int num=0; num<ite; num++)
+      for(int currentZ=z-len; currentZ<=z+len; currentZ++)
       {
-        const int x1 =  num % side;
-        const int y1 = (num / side) % side;
-        const int z1 =  num / (side*side);
-
-        // get x,y,z coordinates for the current cube
-        int currentX = x - len + x1;
-        int currentY = y - len + y1;
-        int currentZ = z - len + z1;
-
-        unsigned long long cube_mapped = -1, cube = -1;
-        if((currentX>=0 && currentX<cubesInX) && (currentY>=0 && currentY<cubesInY) && (currentZ>=0 && currentZ<cubesInZ))
+        for(int currentY=y-len; currentY<=y+len; currentY++)
         {
-          cube_mapped = currentX  + currentY*cubesInX + currentZ*(cubesInY*cubesInX);
-
-          int bin = cube_mapped/binSize;
-
-          int from = binStart[bin];
-          int to   = (bin+1 < bins) ? binStart[bin+1]-1 : cubes;
-
-          while(to >= from)
+          for(int currentX=x-len; currentX<=x+len; currentX++)
           {
-            int mid = from + ((to - from) / 2);
-            if (cubeMapping[mid] < cube_mapped)
-              from = mid + 1;
-            else if (cubeMapping[mid] > cube_mapped)
-              to = mid - 1;
-            else
-            { cube = mid; break; }
+            if(currentX==x && currentY==y && currentZ==z) goto loopEnd;
+
+            if((currentX>=0 && currentX<cubesInX) && (currentY>=0 && currentY<cubesInY) && (currentZ>=0 && currentZ<cubesInZ))
+            {
+              unsigned long long cube_mapped = currentX  + currentY*cubesInX + currentZ*(cubesInY*cubesInX);
+
+              int bin = cube_mapped/binSize;
+
+              int from = binStart[bin];
+              int to   = (bin+1 < bins) ? binStart[bin+1]-1 : cubes;
+
+              long long cube = -1;
+              while(to >= from)
+              {
+                int mid = from + ((to - from) / 2);
+                if (cubeMapping[mid] < cube_mapped)
+                  from = mid + 1;
+                else if (cubeMapping[mid] > cube_mapped)
+                  to = mid - 1;
+                else
+                { cube = mid; break; }
+              }
+
+              if(cube==-1) continue;
+
+              int size1 = (i+1<cubes) ? particleStartOfCubes[i+1]-particleStartOfCubes[i] : numOfParticles-particleStartOfCubes[i];
+              int size2 = (cube+1<cubes) ? particleStartOfCubes[cube+1]-particleStartOfCubes[cube] : numOfParticles-particleStartOfCubes[cube];
+
+              // for each particle in this cube
+              bool found = false;
+              for(int j=particleStartOfCubes[i]; j<particleStartOfCubes[i]+size1; j++)
+              {
+                float3 p_j = make_float3(leafX[j], leafY[j], leafZ[j]);
+
+                // compare with particles in neighboring cube
+                for(int k=particleStartOfCubes[cube]; k<particleStartOfCubes[cube]+size2; k++)
+                {
+                  float3 p_k = make_float3(leafX[k], leafY[k], leafZ[k]);
+
+                  double dist = ((p_j.x-p_k.x)*(p_j.x-p_k.x) + (p_j.y-p_k.y)*(p_j.y-p_k.y) + (p_j.z-p_k.z)*(p_j.z-p_k.z));
+                  if(dist < max_ll*max_ll)
+                  {
+                    found = true;
+                    goto loop;
+                  }
+                }
+              }
+
+              loop:
+              if(found) sumNonEmptyCubes++;  //sum the non empty neighbor cubes
+            }
           }
         }
-
-        if(cube_mapped==-1 || cube==-1) continue;
-
-        sumNonEmptyCubes++;  //sum the non empty neighbor cubes
       }
 
+      loopEnd:
       edgeSizeOfCubes[i] = sumNonEmptyCubes; // store sum of non empty neighbor cubes for this cube
     }
   };
@@ -978,7 +1017,7 @@ public:
           int currentY = y - len + y1;
           int currentZ = z - len + z1;
 
-          unsigned long long cube_mapped = -1, cube = -1;
+          long long cube_mapped = -1, cube = -1;
           if((currentX>=0 && currentX<cubesInX) && (currentY>=0 && currentY<cubesInY) && (currentZ>=0 && currentZ<cubesInZ))
           {
             cube_mapped = currentX  + currentY*cubesInX + currentZ*(cubesInY*cubesInX);
@@ -1045,10 +1084,10 @@ public:
   // finalize the init of tmpFree & tmpNxt arrays
   struct initNxt : public thrust::unary_function<int, void>
   {
-    unsigned long long *tmpFree, *tmpNxt;
+    long long *tmpNxt, *tmpFree;
 
     __host__ __device__
-    initNxt(unsigned long long *tmpNxt, unsigned long long *tmpFree) : tmpNxt(tmpNxt), tmpFree(tmpFree) {}
+    initNxt(long long *tmpNxt, long long *tmpFree) : tmpNxt(tmpNxt), tmpFree(tmpFree) {}
 
     __host__ __device__
     void operator()(int i)
@@ -1072,7 +1111,7 @@ public:
     float *nodeVX, *nodeVY, *nodeVZ;
 
     unsigned long long *particleStartOfCubes;
-    unsigned long long *tmpNxt, *tmpFree;
+    long long *tmpNxt, *tmpFree;
 
     float min_ll;
     int numOfParticles;
@@ -1085,7 +1124,7 @@ public:
       int *nodeI, int *nodeCount, float *nodeValue,
       float *nodeX, float *nodeY, float *nodeZ,
       float *nodeVX, float *nodeVY, float *nodeVZ,
-      unsigned long long *particleStartOfCubes, unsigned long long *tmpNxt, unsigned long long *tmpFree,
+      unsigned long long *particleStartOfCubes, long long *tmpNxt, long long *tmpFree,
       float min_ll, int numOfParticles, unsigned long long cubes) :
       leafParent(leafParent), leafI(leafI),
       leafX(leafX), leafY(leafY), leafZ(leafZ),
@@ -1110,7 +1149,7 @@ public:
 
       int size = (i+1<cubes) ? particleStartOfCubes[i+1]-particleStartOfCubes[i] : numOfParticles-particleStartOfCubes[i];
 
-      unsigned long long minHaloId = -1;
+      long long minHaloId = -1;
       for(int j=particleStartOfCubes[i]; j<particleStartOfCubes[i]+size; j++)
       {
         leafParent[j] = n; // n is the index in node lists
@@ -1138,20 +1177,17 @@ public:
   // merge local merge trees to create the global merge tree
   void globalStep()
   {
-    unsigned long long cubesOld = cubes;
     unsigned long long cubesOri = cubes;
     int sizeP = 1;
 
     // iteratively combine the cubes two at a time
     int i = 0;
-    while(numOfEdges!=0)
+    while(true)
     {
-      int empty = thrust::count(nodeCount.begin(), nodeCount.end(), 0);
-      struct timeval begin, mid1, mid2, mid3, mid4, end, diff, diff1, diff2, diff3, diff4, diff5;
+      struct timeval begin, end, diff;
       gettimeofday(&begin, 0);
-      // set new number of cubes & sizeP
-      cubesOld = cubes;
-      if(cubes != (int)std::ceil(((double)cubes/k)))
+      
+      if(cubes != (int)std::ceil(((double)cubes/k))) // set new number of cubes & sizeP
       {
         sizeP *= k;
         cubes = (int)std::ceil(((double)cubes/k));
@@ -1160,7 +1196,14 @@ public:
                                    thrust::raw_pointer_cast(&*tmpFree.begin()),
                                    sizeP, k, cubesOri));
       }
-      gettimeofday(&mid1, 0);
+      else
+      {
+        if(cubes==1) break;
+
+//        numOfEdges = thrust::reduce(edgeSizeOfCubes.begin(), edgeSizeOfCubes.end());
+//        if(numOfEdges==0) break;
+      }
+
       thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
         combineMergeTrees(thrust::raw_pointer_cast(&*cubeMapping.begin()),
                           thrust::raw_pointer_cast(&*cubeId.begin()),
@@ -1183,49 +1226,29 @@ public:
                           thrust::raw_pointer_cast(&*edgeStartOfCubes.begin()),
                           thrust::raw_pointer_cast(&*edgeSizeOfCubes.begin()),
                           min_ll, sizeP, cubesOri));
-      gettimeofday(&mid2, 0);
+
       thrust::for_each(CountingIterator(0), CountingIterator(0)+2*cubesOri,
           jumpNodePointers(thrust::raw_pointer_cast(&*nodeParent.begin()),
                            thrust::raw_pointer_cast(&*nodeCount.begin()),
                            thrust::raw_pointer_cast(&*nodeValue.begin())));
-      gettimeofday(&mid3, 0);
+
       thrust::for_each(CountingIterator(0), CountingIterator(0)+numOfParticles,
           jumpLeafPointers(thrust::raw_pointer_cast(&*leafParent.begin()),
                            thrust::raw_pointer_cast(&*nodeParent.begin()),
                            thrust::raw_pointer_cast(&*nodeValue.begin())));
-      gettimeofday(&mid4, 0);
+
       thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
           freeNodes(thrust::raw_pointer_cast(&*tmpNxt.begin()),
                     thrust::raw_pointer_cast(&*tmpFree.begin()),
                     thrust::raw_pointer_cast(&*nodeParent.begin()),
                     thrust::raw_pointer_cast(&*nodeCount.begin()),
                     sizeP, cubesOri));
-      gettimeofday(&end, 0);
 
-//      std::cout << std::endl;
-//      std::cout << "'globalStep' Time division:" << std::endl << std::flush;
-//      timersub(&mid1, &begin, &diff1);
-//      float seconds1 = diff1.tv_sec + 1.0E-6*diff1.tv_usec;
-//      std::cout << "Time elapsed0: " << seconds1 << " s for combineFreeLists" << std::endl << std::flush;
-//      timersub(&mid2, &mid1, &diff2);
-//      float seconds2 = diff2.tv_sec + 1.0E-6*diff2.tv_usec;
-//      std::cout << "Time elapsed1: " << seconds2 << " s for combineMergeTrees" << std::endl << std::flush;
-//      timersub(&mid3, &mid2, &diff3);
-//      float seconds3 = diff3.tv_sec + 1.0E-6*diff3.tv_usec;
-//      std::cout << "Time elapsed2: " << seconds3 << " s for jumpLeafPointers" << std::endl << std::flush;
-//      timersub(&mid4, &mid3, &diff4);
-//      float seconds4 = diff4.tv_sec + 1.0E-6*diff4.tv_usec;
-//      std::cout << "Time elapsed3: " << seconds4 << " s for jumpNodePointers" << std::endl << std::flush;
-//      timersub(&end, &mid4, &diff4);
-//      float seconds5 = diff5.tv_sec + 1.0E-6*diff5.tv_usec;
-//      std::cout << "Time elapsed4: " << seconds5 << " s for freeNodes" << std::endl << std::flush;
+			gettimeofday(&end, 0);
 
       timersub(&end, &begin, &diff);
       float seconds = diff.tv_sec + 1.0E-6*diff.tv_usec;
-      std::cout << "Iteration: " << i << " ... time elapsed " << seconds << "s nonEmptyCubes " << cubes << " numOfEdges before " << numOfEdges;
-
-      numOfEdges = thrust::reduce(edgeSizeOfCubes.begin(), edgeSizeOfCubes.begin()+cubesOri);
-      std::cout << " numOfEdges after " << numOfEdges << std::endl;
+      std::cout << "Iteration: " << i << " ... time elapsed " << seconds << "s nonEmptyCubes " << cubes << std::endl;
 
       i++;
     }
@@ -1239,10 +1262,10 @@ public:
     int  sizeP, n;
     unsigned long long numOfCubesOri;
 
-    unsigned long long *tmpNxt, *tmpFree;
+    long long *tmpNxt, *tmpFree;
 
     __host__ __device__
-    combineFreeLists(unsigned long long *tmpNxt, unsigned long long *tmpFree, int sizeP, int n, unsigned long long numOfCubesOri) :
+    combineFreeLists(long long *tmpNxt, long long *tmpFree, int sizeP, int n, unsigned long long numOfCubesOri) :
         tmpNxt(tmpNxt), tmpFree(tmpFree), sizeP(sizeP), n(n), numOfCubesOri(numOfCubesOri) {}
 
     __host__ __device__
@@ -1279,7 +1302,7 @@ public:
     unsigned long long *cubeId;
     unsigned long long *cubeMapping;
 
-    unsigned long long *tmpNxt, *tmpFree;
+    long long *tmpNxt, *tmpFree;
 
     unsigned long long *edgesSrc, *edgesDes;
     float *edgesWeight;
@@ -1293,7 +1316,7 @@ public:
     float *nodeVX, *nodeVY, *nodeVZ;
 
     __host__ __device__
-    combineMergeTrees(unsigned long long *cubeMapping, unsigned long long *cubeId, unsigned long long *tmpNxt, unsigned long long *tmpFree,
+    combineMergeTrees(unsigned long long *cubeMapping, unsigned long long *cubeId, long long *tmpNxt, long long *tmpFree,
         int *leafParent, int *nodeParent,
         int *nodeI, float *nodeValue, int *nodeCount,
         float *nodeX, float *nodeY, float *nodeZ,
@@ -1331,8 +1354,7 @@ public:
           float eWeight = edgesWeight[j];
 
           if(!(cubeId[eSrc]>=cubeStartM && cubeId[eSrc]<=cubeEndM) ||
-             !(cubeId[eDes]>=cubeStartM && cubeId[eDes]<=cubeEndM) ||
-              (tmpNxt[cubeStart]==-1))
+             !(cubeId[eDes]>=cubeStartM && cubeId[eDes]<=cubeEndM))
           {
             edgesSrc[edgeStartOfCubes[k] + size] = eSrc;
             edgesDes[edgeStartOfCubes[k] + size] = eDes;
@@ -1353,6 +1375,15 @@ public:
 
           // if src & des already have the same halo id, do NOT do anything
           if(nodeI[src]==nodeI[des]) continue;
+
+          if(tmpNxt[cubeStart]==-1)
+          {
+            edgesSrc[edgeStartOfCubes[k] + size] = eSrc;
+            edgesDes[edgeStartOfCubes[k] + size] = eDes;
+            edgesWeight[edgeStartOfCubes[k] + size] = eWeight;
+            size++;
+            continue;
+          }
 
           int srcCount = nodeCount[src];
           int desCount = nodeCount[des];
@@ -1511,7 +1542,6 @@ public:
           }
 
           //-----------------------------------------------------
-
         }
 
         edgeSizeOfCubes[k] = size;
@@ -1530,7 +1560,7 @@ public:
       nodeParent(nodeParent), nodeCount(nodeCount), nodeValue(nodeValue) {}
 
     __host__ __device__
-    bool operator()(int i)
+    void operator()(int i)
     {
       int tmp = nodeParent[i];
 
@@ -1555,7 +1585,7 @@ public:
       leafParent(leafParent), nodeParent(nodeParent), nodeValue(nodeValue) {}
 
     __host__ __device__
-    bool operator()(int i)
+    void operator()(int i)
     {
       int tmp = leafParent[i];
 
@@ -1572,17 +1602,17 @@ public:
     int  sizeP;
     unsigned long long numOfCubesOri;
 
-    unsigned long long *tmpNxt, *tmpFree;
+    long long *tmpNxt, *tmpFree;
 
     int *nodeParent;
     int *nodeCount;
 
     __host__ __device__
-    freeNodes(unsigned long long *tmpNxt, unsigned long long *tmpFree, int *nodeParent, int *nodeCount, int sizeP, unsigned long long numOfCubesOri) :
+    freeNodes(long long *tmpNxt, long long *tmpFree, int *nodeParent, int *nodeCount, int sizeP, unsigned long long numOfCubesOri) :
         tmpNxt(tmpNxt), tmpFree(tmpFree), nodeParent(nodeParent), nodeCount(nodeCount), sizeP(sizeP), numOfCubesOri(numOfCubesOri) {}
 
     __host__ __device__
-    bool operator()(int i)
+    void operator()(int i)
     {
       int cubeStart = sizeP*i;
       int cubeEnd   = (sizeP*(i+1)<=numOfCubesOri) ? sizeP*(i+1) : numOfCubesOri;
