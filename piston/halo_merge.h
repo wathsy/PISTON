@@ -688,42 +688,43 @@ public:
 
 //----------------------
 
-thrust::device_vector<int> a(10);
-thrust::sequence(a.begin(), a.end(), 5);
-thrust::counting_iterator<int> search_begin(0);
-thrust::device_vector<int> bucket_begin(10);
-thrust::device_vector<int> bucket_end(10);
-thrust::lower_bound(a.begin(), a.end(), search_begin, search_begin + 10, bucket_begin.begin());
-thrust::upper_bound(a.begin(), a.end(), search_begin, search_begin + 10, bucket_end.begin());
+//thrust::device_vector<int> a(10);
+//thrust::sequence(a.begin(), a.end(), 5);
+//thrust::counting_iterator<int> search_begin(0);
+//thrust::device_vector<int> bucket_begin(10);
+//thrust::device_vector<int> bucket_end(10);
+//thrust::lower_bound(a.begin(), a.end(), search_begin, search_begin + 10, bucket_begin.begin());
+//thrust::upper_bound(a.begin(), a.end(), search_begin, search_begin + 10, bucket_end.begin());
+//
+//std::cout << "a               "; thrust::copy(a.begin(), a.begin()+10, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
+//std::cout << "search_begin    "; thrust::copy(search_begin, search_begin+10, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
+//std::cout << "bucket_begin    "; thrust::copy(bucket_begin.begin(), bucket_begin.begin()+10, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
+//std::cout << "bucket_end      "; thrust::copy(bucket_end.begin(), bucket_end.begin()+10, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
 
-std::cout << "a               "; thrust::copy(a.begin(), a.begin()+10, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
-std::cout << "search_begin    "; thrust::copy(search_begin, search_begin+10, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
-std::cout << "bucket_begin    "; thrust::copy(bucket_begin.begin(), bucket_begin.begin()+10, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
-std::cout << "bucket_end      "; thrust::copy(bucket_end.begin(), bucket_end.begin()+10, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
+//----------------------
+
+//    thrust::device_vector<long long> tmp, tmp1, tmp2;
+//    tmp.resize(cubes);
+//    tmp1.resize(cubes);
+//    tmp2.resize(cubes);
+//    for(int i=0; i<ite; i++)
+//    {
+//      //get cube id to compare
+//      thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
+//          getNeighborcube(thrust::raw_pointer_cast(&*cubeMapping.begin()),
+//                          thrust::raw_pointer_cast(&*tmp.begin()),
+//                          i, side, cubesInX, cubesInY, cubesInZ));
+//      //check if cube is not empty (get both lower_bound & upper_bound)
+//      thrust::lower_bound(cubeMapping.begin(), cubeMapping.end(), tmp.begin(), tmp.end(), tmp1.begin());
+//      thrust::upper_bound(cubeMapping.begin(), cubeMapping.end(), tmp.begin(), tmp.end(), tmp2.begin());
+//      //compare particles to see if edge exists
+//
+//    }
 
 //----------------------
 
     struct timeval begin, mid1, mid2, mid3, mid4, mid5, end, diff1, diff2, diff3, diff4, diff5, diff6;
     gettimeofday(&begin, 0);
-
-    thrust::device_vector<long long> tmp, tmp1, tmp2;
-    tmp.resize(cubes);
-    tmp1.resize(cubes);
-    tmp2.resize(cubes);
-    for(int i=0; i<ite; i++)
-    {
-      //get cube id to compare
-      thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
-          getNeighborcube(thrust::raw_pointer_cast(&*cubeMapping.begin()),
-                          thrust::raw_pointer_cast(&*tmp.begin()),
-                          ite, side, cubesInX, cubesInY, cubesInZ));
-      //check if cube is not empty (get both lower_bound & upper_bound)
-      thrust::lower_bound(cubeMapping.begin(), cubeMapping.end(), tmp.begin(), tmp.end(), tmp1.begin());
-      thrust::upper_bound(cubeMapping.begin(), cubeMapping.end(), tmp.begin(), tmp.end(), tmp2.begin());
-      //compare particles to see if edge exists
-    }
-
-    gettimeofday(&mid1, 0);
 
     // set bins
     binSize = cubesInX;
@@ -733,21 +734,22 @@ std::cout << "bucket_end      "; thrust::copy(bucket_end.begin(), bucket_end.beg
         setBins(thrust::raw_pointer_cast(&*cubeMapping.begin()),
                 thrust::raw_pointer_cast(&*binStart.begin()),
                 binSize));
+//    thrust::inclusive_scan(binStart.begin(), binStart.end(), binStart.begin(), thrust::maximum<unsigned long long>());
     std::cout << std::endl << "bins " << bins << " binSize " << binSize << std::endl;
+
+//    std::cout << "cubeMapping "; thrust::copy(cubeMapping.begin(), cubeMapping.begin()+100, std::ostream_iterator<unsigned long long>(std::cout, " ")); std::cout << std::endl << std::endl;
+//    std::cout << "cubeMapping "; thrust::copy(binStart.begin(), binStart.begin()+100, std::ostream_iterator<unsigned long long>(std::cout, " ")); std::cout << std::endl << std::endl;
+
+    gettimeofday(&mid1, 0);
 
     // for each cube, get neighbor details
     edgeSizeOfCubes.resize(cubes);
     edgeStartOfCubes.resize(cubes);
-
     thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
         getNeighborDetails(thrust::raw_pointer_cast(&*cubeMapping.begin()),
                            thrust::raw_pointer_cast(&*binStart.begin()),
                            thrust::raw_pointer_cast(&*edgeSizeOfCubes.begin()),
-                           thrust::raw_pointer_cast(&*particleStartOfCubes.begin()),
-                           thrust::raw_pointer_cast(&*leafX.begin()),
-                           thrust::raw_pointer_cast(&*leafY.begin()),
-                           thrust::raw_pointer_cast(&*leafZ.begin()),
-                           ite, side, numOfParticles, max_ll, cubesInX, cubesInY, cubesInZ, cubes, binSize, bins));
+                           side, cubesInX, cubesInY, cubesInZ, cubes, binSize, bins));
 
     gettimeofday(&mid2, 0);
 
@@ -850,10 +852,6 @@ std::cout << "bucket_end      "; thrust::copy(bucket_end.begin(), bucket_end.beg
     unsigned long long  ite, side;
     unsigned long long  cubesInX, cubesInY, cubesInZ;
 
-    float *leafX, *leafY, *leafZ;
-
-    unsigned long long *particleStartOfCubes;
-
     __host__ __device__
     getNeighborcube(unsigned long long *cubeMapping, long long *tmp, unsigned long long ite, unsigned long long side,
         unsigned long long cubesInX, unsigned long long cubesInY, unsigned long long cubesInZ) :
@@ -903,14 +901,12 @@ std::cout << "bucket_end      "; thrust::copy(bucket_end.begin(), bucket_end.beg
     __host__ __device__
     void operator()(int i)
     {
+      unsigned long long m = (i!=0) ? cubeMapping[i-1]/binSize : -1;
       unsigned long long n = cubeMapping[i]/binSize;
 
-      if(i==0)
-      { binStart[n] = i;  return; }
-
-      unsigned long long m = cubeMapping[i-1]/binSize;
       if(m!=n)
       {
+//        binStart[m+1] = i;
         for(unsigned long long j=m+1; j<=n; j++)
 	        binStart[j] = i;
       }
@@ -926,26 +922,19 @@ std::cout << "bucket_end      "; thrust::copy(bucket_end.begin(), bucket_end.beg
     unsigned long long  binSize, bins;
     unsigned long long *binStart;
 
-    double max_ll;
-    int numOfParticles;
-    unsigned long long  ite, side;
+    unsigned long long  side;
     unsigned long long  cubesInX, cubesInY, cubesInZ, cubes;
 
-    float *leafX, *leafY, *leafZ;
-
-    unsigned long long *particleStartOfCubes;
 
     __host__ __device__
     getNeighborDetails(unsigned long long *cubeMapping, unsigned long long *binStart,
-        int *edgeSizeOfCubes, unsigned long long *particleStartOfCubes,
-        float *leafX, float *leafY, float *leafZ,
-        unsigned long long ite, unsigned long long side, int numOfParticles, double max_ll,
+        int *edgeSizeOfCubes,
+        unsigned long long side,
         unsigned long long cubesInX, unsigned long long cubesInY, unsigned long long cubesInZ,
         unsigned long long cubes, unsigned long long binSize, unsigned long long bins) :
         cubeMapping(cubeMapping), binStart(binStart),
-        edgeSizeOfCubes(edgeSizeOfCubes), particleStartOfCubes(particleStartOfCubes),
-        leafX(leafX), leafY(leafY), leafZ(leafZ),
-        ite(ite), side(side), numOfParticles(numOfParticles), max_ll(max_ll),
+        edgeSizeOfCubes(edgeSizeOfCubes),
+        side(side),
         cubesInX(cubesInX), cubesInY(cubesInY), cubesInZ(cubesInZ), cubes(cubes),
         binSize(binSize), bins(bins) {}
 
@@ -966,6 +955,8 @@ std::cout << "bucket_end      "; thrust::copy(bucket_end.begin(), bucket_end.beg
       {
         for(int currentY=y-len; currentY<=y+len; currentY++)
         {
+          bool first = true;
+          unsigned long long from, to;
           for(int currentX=x-len; currentX<=x+len; currentX++)
           {
             if(currentX==x && currentY==y && currentZ==z) goto loopEnd;
@@ -974,51 +965,35 @@ std::cout << "bucket_end      "; thrust::copy(bucket_end.begin(), bucket_end.beg
             {
               unsigned long long cube_mapped = currentX  + currentY*cubesInX + currentZ*(cubesInY*cubesInX);
 
-              int bin = cube_mapped/binSize;
-
-              int from = binStart[bin];
-              int to   = (bin+1 < bins) ? binStart[bin+1]-1 : cubes;
-
-              long long cube = -1;
-              while(to >= from)
+              if(first)
               {
-                int mid = from + ((to - from) / 2);
-                if (cubeMapping[mid] < cube_mapped)
-                  from = mid + 1;
-                else if (cubeMapping[mid] > cube_mapped)
-                  to = mid - 1;
-                else
-                { cube = mid; break; }
+                first = false;
+
+                int bin = cube_mapped/binSize;
+                from = binStart[bin];
+                to   = (bin+1 < bins) ? binStart[bin+1]-1 : cubes;
               }
+              while(from<to && cubeMapping[from]<cube_mapped) from++;
+              if(cubeMapping[from]!=cube_mapped) continue;
 
-              if(cube==-1) continue;
+//              int bin = cube_mapped/binSize;
+//              int from = binStart[bin];
+//              int to = (bin+1 < bins) ? binStart[bin+1]-1 : cubes;
+//              long long cube = -1;
+//              while(to >= from)
+//              {
+//                int mid = from + ((to - from) / 2);
+//                if (cubeMapping[mid] < cube_mapped)
+//                  from = mid + 1;
+//                else if (cubeMapping[mid] > cube_mapped)
+//                  to = mid - 1;
+//                else
+//                { cube = mid; break; }
+//              }
+//              if(cube==-1) continue;
 
-              int size1 = (i+1<cubes) ? particleStartOfCubes[i+1]-particleStartOfCubes[i] : numOfParticles-particleStartOfCubes[i];
-              int size2 = (cube+1<cubes) ? particleStartOfCubes[cube+1]-particleStartOfCubes[cube] : numOfParticles-particleStartOfCubes[cube];
-
-              // for each particle in this cube
-              bool found = false;
-              for(int j=particleStartOfCubes[i]; j<particleStartOfCubes[i]+size1; j++)
-              {
-                float3 p_j = make_float3(leafX[j], leafY[j], leafZ[j]);
-
-                // compare with particles in neighboring cube
-                for(int k=particleStartOfCubes[cube]; k<particleStartOfCubes[cube]+size2; k++)
-                {
-                  float3 p_k = make_float3(leafX[k], leafY[k], leafZ[k]);
-
-                  double dist = ((p_j.x-p_k.x)*(p_j.x-p_k.x) + (p_j.y-p_k.y)*(p_j.y-p_k.y) + (p_j.z-p_k.z)*(p_j.z-p_k.z));
-                  if(dist < max_ll*max_ll)
-                  {
-                    found = true;
-                    goto loop;
-                  }
-                }
-              }
-
-              loop:
-              if(found) sumNonEmptyCubes++;  //sum the non empty neighbor cubes
-            }
+              sumNonEmptyCubes++;  //sum the non empty neighbor cubes
+           }
           }
         }
       }
