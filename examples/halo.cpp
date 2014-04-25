@@ -137,6 +137,7 @@ void compareResultsAscii(string filename, int numOfParticles, thrust::device_vec
 	if(count != 0) std::cout << "count " << count << std::endl << std::endl;
 }
 
+
 int main(int argc, char* argv[])
 {
 	if (argc < 11)
@@ -147,6 +148,24 @@ int main(int argc, char* argv[])
 		std::cout << "haloOMP filename format min_ll max_ll l_length p_size np rL n k\n" << std::endl;
 		return 1;
 	}
+
+//  {
+//    // serially generate 1M random numbers on the host
+//    thrust::host_vector<int> h_vec(1 << 20);
+//    thrust::sequence(h_vec.begin(), h_vec.end());
+//
+//    // transfer data to OpenMP
+//    thrust::omp::vector<int> d_vec = h_vec;
+//
+//    // sort data in parallel with OpenMP
+//    thrust::sort(d_vec.begin(), d_vec.end());
+//
+//    // transfer data back to host
+//    thrust::copy(d_vec.begin(), d_vec.end(), h_vec.begin());
+//
+//    // report the largest number
+//    std::cout << "Largest number is " << h_vec.back() << std::endl;
+//  }
 
   //---------------------------- set parameters
 
