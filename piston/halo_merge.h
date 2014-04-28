@@ -60,7 +60,6 @@ public:
   thrust::device_vector<float> nodeX, nodeY, nodeZ;               // positions of each node
   thrust::device_vector<float> nodeVX, nodeVY, nodeVZ;            // velocities of each node
 
-
   halo_merge(float min_linkLength, float max_linkLength, int k = 2, std::string filename="", std::string format=".cosmo", int n = 1, int np=1, float rL=-1) : halo(filename, format, n, np, rL)
   {
     if(numOfParticles!=0)
@@ -115,6 +114,9 @@ public:
 
       std::cout << "-- globalStep done" << std::endl << std::endl;
 
+      getSizeOfMergeTree();
+      writeMergeTreeToFile(filename);
+
       std::cout << std::endl;
       timersub(&mid1, &begin, &diff1);
       float seconds1 = diff1.tv_sec + 1.0E-6*diff1.tv_usec;
@@ -131,13 +133,8 @@ public:
       totalTime = seconds1 + seconds2 + seconds3 + seconds4;
       std::cout << "Total time elapsed: " << totalTime << " s for constructing the global merge tree" << std::endl << std::endl;
 
-      getSizeOfMergeTree();
-      writeMergeTreeToFile(filename);
-
       // sort particles again by their original particle id - for validation purposes
       thrust::sort_by_key(idOriginal.begin(), idOriginal.end(), thrust::make_zip_iterator(thrust::make_tuple(leafX.begin(), leafY.begin(), leafZ.begin(), leafVX.begin(), leafVY.begin(), leafVZ.begin(), leafM.begin(), leafI.begin(), leafParent.begin())));
-
-      thrust::fill(leafParentS.begin(), leafParentS.end(), -1);
 
       sizeOfChunks.clear(); startOfChunks.clear();
       binStart.clear();
@@ -505,6 +502,7 @@ public:
       inputX_f[i] = leafX[n];
       inputY_f[i] = leafY[n];
       inputZ_f[i] = leafZ[n];
+
       haloIndex_f[i] = haloIndex[n];
     }
   };
@@ -550,7 +548,7 @@ public:
 
     gettimeofday(&mid3, 0);
 
-    setChunks(); //set chunks for load balance
+    //setChunks(); //set chunks for load balance
     thrust::exclusive_scan(particleStartOfCubes.begin(), particleStartOfCubes.begin()+cubes, particleStartOfCubes.begin());
     cubeMapping.resize(cubes);
     particleStartOfCubes.resize(cubes);
@@ -691,6 +689,7 @@ public:
   void localStep()
   {
     struct timeval begin, mid1, mid2, mid3, mid4, mid5, end, diff1, diff2, diff3, diff4, diff5, diff6;
+
     gettimeofday(&begin, 0);
 
     // set bins
@@ -759,9 +758,6 @@ public:
     numOfEdges = thrust::reduce(edgeSizeOfCubes.begin(), edgeSizeOfCubes.end());
     std::cout << std::endl << "numOfEdges " << numOfEdges << std::endl; // set the correct number of edges
 
-    //sort edges
-    sortEdgesPerCube();
-
     std::cout << "----edgesWeight "; thrust::copy(edgesWeight.begin(), edgesWeight.begin()+2, std::ostream_iterator<float>(std::cout, " ")); std::cout << std::endl;
 
     gettimeofday(&mid4, 0);
@@ -783,23 +779,22 @@ public:
     // set local merge trees for each cube
     thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
         createSubMergeTree(thrust::raw_pointer_cast(&*leafParent.begin()),
-                           thrust::raw_pointer_cast(&*leafParentS.begin()),
                            thrust::raw_pointer_cast(&*leafI.begin()),
-//                           thrust::raw_pointer_cast(&*leafX.begin()),
-//                           thrust::raw_pointer_cast(&*leafY.begin()),
-//                           thrust::raw_pointer_cast(&*leafZ.begin()),
-//                           thrust::raw_pointer_cast(&*leafVX.begin()),
-//                           thrust::raw_pointer_cast(&*leafVY.begin()),
-//                           thrust::raw_pointer_cast(&*leafVZ.begin()),
+                           thrust::raw_pointer_cast(&*leafX.begin()),
+                           thrust::raw_pointer_cast(&*leafY.begin()),
+                           thrust::raw_pointer_cast(&*leafZ.begin()),
+                           thrust::raw_pointer_cast(&*leafVX.begin()),
+                           thrust::raw_pointer_cast(&*leafVY.begin()),
+                           thrust::raw_pointer_cast(&*leafVZ.begin()),
                            thrust::raw_pointer_cast(&*nodeI.begin()),
                            thrust::raw_pointer_cast(&*nodeCount.begin()),
                            thrust::raw_pointer_cast(&*nodeValue.begin()),
-//                           thrust::raw_pointer_cast(&*nodeX.begin()),
-//                           thrust::raw_pointer_cast(&*nodeY.begin()),
-//                           thrust::raw_pointer_cast(&*nodeZ.begin()),
-//                           thrust::raw_pointer_cast(&*nodeVX.begin()),
-//                           thrust::raw_pointer_cast(&*nodeVY.begin()),
-//                           thrust::raw_pointer_cast(&*nodeVZ.begin()),
+                           thrust::raw_pointer_cast(&*nodeX.begin()),
+                           thrust::raw_pointer_cast(&*nodeY.begin()),
+                           thrust::raw_pointer_cast(&*nodeZ.begin()),
+                           thrust::raw_pointer_cast(&*nodeVX.begin()),
+                           thrust::raw_pointer_cast(&*nodeVY.begin()),
+                           thrust::raw_pointer_cast(&*nodeVZ.begin()),
                            thrust::raw_pointer_cast(&*particleStartOfCubes.begin()),
                            thrust::raw_pointer_cast(&*tmpNxt.begin()),
                            thrust::raw_pointer_cast(&*tmpFree.begin()),
@@ -1105,60 +1100,6 @@ public:
     }
   };
 
-  // for each cube, sort the edges by weight
-  void sortEdgesPerCube()
-  {
-    thrust::device_vector<double> tmpDoubleArray1;
-    tmpDoubleArray1.resize(numOfEdges); // stores the keys
-
-    thrust::for_each(CountingIterator(0), CountingIterator(0)+chunks,
-        setValuesAndKeys(thrust::raw_pointer_cast(&*startOfChunks.begin()),
-                         thrust::raw_pointer_cast(&*edgesWeight.begin()),
-                         thrust::raw_pointer_cast(&*edgeSizeOfCubes.begin()),
-                         thrust::raw_pointer_cast(&*edgeStartOfCubes.begin()),
-                         max_ll, chunks, cubes,
-                         thrust::raw_pointer_cast(&*tmpDoubleArray1.begin())));
-
-    thrust::stable_sort_by_key(tmpDoubleArray1.begin(), tmpDoubleArray1.end(),
-        thrust::make_zip_iterator(thrust::make_tuple(edgesSrc.begin(), edgesDes.begin(), edgesWeight.begin())));
-
-    tmpDoubleArray1.clear();
-  }
-
-  // set values & keys arrays needed for edge sorting
-  struct setValuesAndKeys : public thrust::unary_function<int, void>
-  {
-    float max_ll;
-
-    unsigned long long  cubes;
-    unsigned long long  chunks;
-    unsigned long long *startOfChunks;
-
-    double *keys;
-
-    float *edgesWeight;
-    int   *edgeStartOfCubes, *edgeSizeOfCubes;
-
-    __host__ __device__
-    setValuesAndKeys(unsigned long long *startOfChunks,
-        float *edgesWeight, int *edgeSizeOfCubes, int *edgeStartOfCubes,
-        float max_ll, unsigned long long chunks, unsigned long long cubes, double *keys) :
-        startOfChunks(startOfChunks),
-        edgesWeight(edgesWeight), edgeSizeOfCubes(edgeSizeOfCubes), edgeStartOfCubes(edgeStartOfCubes),
-        max_ll(max_ll), chunks(chunks), cubes(cubes), keys(keys) {}
-
-    __host__ __device__
-    void operator()(int i)
-    {
-      unsigned long long chunkSize = (i+1<chunks) ? startOfChunks[i+1]-startOfChunks[i] : cubes-startOfChunks[i];
-      for(unsigned long long l=startOfChunks[i]; l<startOfChunks[i]+chunkSize; l++)
-      {
-        for(unsigned long long j=edgeStartOfCubes[l]; j<edgeStartOfCubes[l]+edgeSizeOfCubes[l]; j++)
-          keys[j] = (double)(edgesWeight[j] + (double)2*l*max_ll);
-      }
-    }
-  };
-
   // finalize the init of tmpFree & tmpNxt arrays
   struct initNxt : public thrust::unary_function<int, void>
   {
@@ -1179,11 +1120,15 @@ public:
   // create the submerge tree for each cube
   struct createSubMergeTree : public thrust::unary_function<int, void>
   {
-    int   *leafParent, *leafParentS;
+    int   *leafParent;
     int   *leafI;
+    float *leafX, *leafY, *leafZ;
+    float *leafVX, *leafVY, *leafVZ;
 
     int   *nodeI, *nodeCount;
     float *nodeValue;
+    float *nodeX, *nodeY, *nodeZ;
+    float *nodeVX, *nodeVY, *nodeVZ;
 
     unsigned long long *particleStartOfCubes;
     long long *tmpNxt, *tmpFree;
@@ -1193,12 +1138,20 @@ public:
     unsigned long long cubes;
 
     __host__ __device__
-    createSubMergeTree(int *leafParent, int *leafParentS, int *leafI,
+    createSubMergeTree(int *leafParent, int *leafI,
+      float *leafX, float *leafY, float *leafZ,
+      float *leafVX, float *leafVY, float *leafVZ,
       int *nodeI, int *nodeCount, float *nodeValue,
+      float *nodeX, float *nodeY, float *nodeZ,
+      float *nodeVX, float *nodeVY, float *nodeVZ,
       unsigned long long *particleStartOfCubes, long long *tmpNxt, long long *tmpFree,
       float min_ll, int numOfParticles, unsigned long long cubes) :
-      leafParent(leafParent), leafParentS(leafParentS), leafI(leafI),
+      leafParent(leafParent), leafI(leafI),
+      leafX(leafX), leafY(leafY), leafZ(leafZ),
+      leafVX(leafVX), leafVY(leafVY), leafVZ(leafVZ),
       nodeI(nodeI), nodeCount(nodeCount), nodeValue(nodeValue),
+      nodeX(nodeX), nodeY(nodeY), nodeZ(nodeZ),
+      nodeVX(nodeVX), nodeVY(nodeVY), nodeVZ(nodeVZ),
       particleStartOfCubes(particleStartOfCubes), tmpNxt(tmpNxt), tmpFree(tmpFree),
       min_ll(min_ll), numOfParticles(numOfParticles), cubes(cubes) {}
 
@@ -1211,94 +1164,31 @@ public:
       tmpFree[tmpNxt[i]] = -2;
       tmpNxt[i] = tmpVal;
 
+      float x=0,  y=0,  z=0;
+      float vx=0, vy=0, vz=0;
+
       int size = (i+1<cubes) ? particleStartOfCubes[i+1]-particleStartOfCubes[i] : numOfParticles-particleStartOfCubes[i];
 
       long long minHaloId = -1;
       for(int j=particleStartOfCubes[i]; j<particleStartOfCubes[i]+size; j++)
       {
-        leafParent[j]  = n; // n is the index in node lists
-//        leafParentS[j] = n;
+        leafParent[j] = n; // n is the index in node lists
 
         minHaloId = (minHaloId==-1) ? leafI[j] : (minHaloId<leafI[j] ? minHaloId : leafI[j]);
+
+        x+=leafX[j]; vx+=leafVX[j];
+        y+=leafY[j]; vy+=leafVY[j];
+        z+=leafZ[j]; vz+=leafVZ[j];
       }
 
       nodeI[n] = minHaloId;
       nodeValue[n] = min_ll;
       nodeCount[n] = size;
+      nodeX[n] = x;   nodeVX[n] = vx;
+      nodeY[n] = y;   nodeVY[n] = vy;
+      nodeZ[n] = z;   nodeVZ[n] = vz;
     }
   };
-
-//  struct createSubMergeTree : public thrust::unary_function<int, void>
-//  {
-//    int   *leafParent;
-//    int   *leafI;
-//    float *leafX, *leafY, *leafZ;
-//    float *leafVX, *leafVY, *leafVZ;
-//
-//    int   *nodeI, *nodeCount;
-//    float *nodeValue;
-//    float *nodeX, *nodeY, *nodeZ;
-//    float *nodeVX, *nodeVY, *nodeVZ;
-//
-//    unsigned long long *particleStartOfCubes;
-//    long long *tmpNxt, *tmpFree;
-//
-//    float min_ll;
-//    int numOfParticles;
-//    unsigned long long cubes;
-//
-//    __host__ __device__
-//    createSubMergeTree(int *leafParent, int *leafI,
-//      float *leafX, float *leafY, float *leafZ,
-//      float *leafVX, float *leafVY, float *leafVZ,
-//      int *nodeI, int *nodeCount, float *nodeValue,
-//      float *nodeX, float *nodeY, float *nodeZ,
-//      float *nodeVX, float *nodeVY, float *nodeVZ,
-//      unsigned long long *particleStartOfCubes, long long *tmpNxt, long long *tmpFree,
-//      float min_ll, int numOfParticles, unsigned long long cubes) :
-//      leafParent(leafParent), leafI(leafI),
-//      leafX(leafX), leafY(leafY), leafZ(leafZ),
-//      leafVX(leafVX), leafVY(leafVY), leafVZ(leafVZ),
-//      nodeI(nodeI), nodeCount(nodeCount), nodeValue(nodeValue),
-//      nodeX(nodeX), nodeY(nodeY), nodeZ(nodeZ),
-//      nodeVX(nodeVX), nodeVY(nodeVY), nodeVZ(nodeVZ),
-//      particleStartOfCubes(particleStartOfCubes), tmpNxt(tmpNxt), tmpFree(tmpFree),
-//      min_ll(min_ll), numOfParticles(numOfParticles), cubes(cubes) {}
-//
-//    __host__ __device__
-//    void operator()(int i)
-//    {
-//      // get the next free node & set it as the parent
-//      int n = tmpNxt[i];
-//      int tmpVal = tmpFree[tmpNxt[i]];
-//      tmpFree[tmpNxt[i]] = -2;
-//      tmpNxt[i] = tmpVal;
-//
-//      float x=0,  y=0,  z=0;
-//      float vx=0, vy=0, vz=0;
-//
-//      int size = (i+1<cubes) ? particleStartOfCubes[i+1]-particleStartOfCubes[i] : numOfParticles-particleStartOfCubes[i];
-//
-//      long long minHaloId = -1;
-//      for(int j=particleStartOfCubes[i]; j<particleStartOfCubes[i]+size; j++)
-//      {
-//        leafParent[j] = n; // n is the index in node lists
-//
-//        minHaloId = (minHaloId==-1) ? leafI[j] : (minHaloId<leafI[j] ? minHaloId : leafI[j]);
-//
-//        x+=leafX[j]; vx+=leafVX[j];
-//        y+=leafY[j]; vy+=leafVY[j];
-//        z+=leafZ[j]; vz+=leafVZ[j];
-//      }
-//
-//      nodeI[n] = minHaloId;
-//      nodeValue[n] = min_ll;
-//      nodeCount[n] = size;
-//      nodeX[n] = x;   nodeVX[n] = vx;
-//      nodeY[n] = y;   nodeVY[n] = vy;
-//      nodeZ[n] = z;   nodeVZ[n] = vz;
-//    }
-//  };
 
 
 
@@ -1322,14 +1212,10 @@ public:
     int i = 0;
     while(true)
     {
-//      std::cout << "edgeSizeOfCubes "; thrust::copy(edgeSizeOfCubes.begin(), edgeSizeOfCubes.begin()+100, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
-//      std::cout << "edgesSrc "; thrust::copy(edgesSrc.begin(), edgesSrc.begin()+100, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
-//      std::cout << "edgesDes "; thrust::copy(edgesDes.begin(), edgesDes.begin()+100, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
-//      std::cout << "edgesWeight "; thrust::copy(edgesWeight.begin(), edgesWeight.begin()+100, std::ostream_iterator<float>(std::cout, " ")); std::cout << std::endl << std::endl;
-
-      struct timeval begin, mid1, mid2, mid3, mid4, end, diff, diff1, diff2, diff3, diff4, diff5;
+      struct timeval begin, mid1, mid2, mid3, mid4, mid5, end, diff, diff1, diff2, diff3, diff4, diff5, diff6;
 
       gettimeofday(&begin, 0);
+
       if(cubes != (int)std::ceil(((double)cubes/k))) // set new number of cubes & sizeP
       {
         sizeP *= k;
@@ -1340,22 +1226,26 @@ public:
                                    thrust::raw_pointer_cast(&*tmpFree.begin()),
                                    sizeP, k, cubesOri));
       }
-      else
-      {
-        if(cubes==1) break;
-      }
+      else if(cubes==1) break;
 
       std::cout << "----tmpNxt "; thrust::copy(tmpNxt.begin(), tmpNxt.begin()+2, std::ostream_iterator<long long>(std::cout, " ")); std::cout << std::endl;
+
       gettimeofday(&mid1, 0);
 
-      //sort edges
+      //combine edges
       thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
-            sortEdges(thrust::raw_pointer_cast(&*edgesSrc.begin()),
-                      thrust::raw_pointer_cast(&*edgesDes.begin()),
-                      thrust::raw_pointer_cast(&*edgesWeight.begin()),
-                      thrust::raw_pointer_cast(&*edgeStartOfCubes.begin()),
-                      thrust::raw_pointer_cast(&*edgeSizeOfCubes.begin()),
-                      sizeP, k, cubesOri));
+            combineEdges(thrust::raw_pointer_cast(&*cubeMapping.begin()),
+                         thrust::raw_pointer_cast(&*cubeId.begin()),
+                         thrust::raw_pointer_cast(&*edgesSrc.begin()),
+                         thrust::raw_pointer_cast(&*edgesDes.begin()),
+                         thrust::raw_pointer_cast(&*edgesWeight.begin()),
+                         thrust::raw_pointer_cast(&*edgeStartOfCubes.begin()),
+                         thrust::raw_pointer_cast(&*edgeSizeOfCubes.begin()),
+                         sizeP, k, cubesOri));
+
+      std::cout << "----edgesSrc "; thrust::copy(edgesSrc.begin(), edgesSrc.begin()+2, std::ostream_iterator<long long>(std::cout, " ")); std::cout << std::endl;
+
+      gettimeofday(&mid2, 0);
 
       thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
         combineMergeTrees(thrust::raw_pointer_cast(&*cubeMapping.begin()),
@@ -1363,17 +1253,16 @@ public:
                           thrust::raw_pointer_cast(&*tmpNxt.begin()),
                           thrust::raw_pointer_cast(&*tmpFree.begin()),
                           thrust::raw_pointer_cast(&*leafParent.begin()),
-                          thrust::raw_pointer_cast(&*leafParentS.begin()),
                           thrust::raw_pointer_cast(&*nodeParent.begin()),
                           thrust::raw_pointer_cast(&*nodeI.begin()),
                           thrust::raw_pointer_cast(&*nodeValue.begin()),
                           thrust::raw_pointer_cast(&*nodeCount.begin()),
-//                          thrust::raw_pointer_cast(&*nodeX.begin()),
-//                          thrust::raw_pointer_cast(&*nodeY.begin()),
-//                          thrust::raw_pointer_cast(&*nodeZ.begin()),
-//                          thrust::raw_pointer_cast(&*nodeVX.begin()),
-//                          thrust::raw_pointer_cast(&*nodeVY.begin()),
-//                          thrust::raw_pointer_cast(&*nodeVZ.begin()),
+                          thrust::raw_pointer_cast(&*nodeX.begin()),
+                          thrust::raw_pointer_cast(&*nodeY.begin()),
+                          thrust::raw_pointer_cast(&*nodeZ.begin()),
+                          thrust::raw_pointer_cast(&*nodeVX.begin()),
+                          thrust::raw_pointer_cast(&*nodeVY.begin()),
+                          thrust::raw_pointer_cast(&*nodeVZ.begin()),
                           thrust::raw_pointer_cast(&*edgesSrc.begin()),
                           thrust::raw_pointer_cast(&*edgesDes.begin()),
                           thrust::raw_pointer_cast(&*edgesWeight.begin()),
@@ -1382,7 +1271,8 @@ public:
                           min_ll, sizeP, cubesOri));
 
       std::cout << "----nodeParent "; thrust::copy(nodeParent.begin(), nodeParent.begin()+2, std::ostream_iterator<int>(std::cout, " ")); std::cout << " ";
-      gettimeofday(&mid2, 0);
+
+      gettimeofday(&mid3, 0);
 
       thrust::for_each(CountingIterator(0), CountingIterator(0)+2*cubesOri,
           jumpNodePointers(thrust::raw_pointer_cast(&*nodeParent.begin()),
@@ -1390,7 +1280,8 @@ public:
                            thrust::raw_pointer_cast(&*nodeValue.begin())));
 
       std::cout << "----nodeParent "; thrust::copy(nodeParent.begin(), nodeParent.begin()+2, std::ostream_iterator<int>(std::cout, " ")); std::cout << " ";
-      gettimeofday(&mid3, 0);
+
+      gettimeofday(&mid4, 0);
 
       thrust::for_each(CountingIterator(0), CountingIterator(0)+numOfParticles,
           jumpLeafPointers(thrust::raw_pointer_cast(&*leafParent.begin()),
@@ -1398,45 +1289,37 @@ public:
                            thrust::raw_pointer_cast(&*nodeValue.begin())));
 
       std::cout << "----leafParent "; thrust::copy(leafParent.begin(), leafParent.begin()+2, std::ostream_iterator<int>(std::cout, " ")); std::cout << " ";
-      gettimeofday(&mid4, 0);
 
-//      thrust::for_each(CountingIterator(0), CountingIterator(0)+numOfParticles,
-//          setLeafParentS(thrust::raw_pointer_cast(&*nodeParent.begin()),
-//                         thrust::raw_pointer_cast(&*leafParentS.begin())));
-//
-//      std::cout << "----leafParentS "; thrust::copy(leafParentS.begin(), leafParentS.begin()+2, std::ostream_iterator<int>(std::cout, " ")); std::cout << " ";
+      gettimeofday(&mid5, 0);
 
-      {
-        new_end = thrust::remove_copy_if(A.begin(), A.end(), B.begin(), isUsed(thrust::raw_pointer_cast(&*nodeCount.begin())));
+      new_end = thrust::remove_copy_if(A.begin(), A.end(), B.begin(), isUsed(thrust::raw_pointer_cast(&*nodeCount.begin())));
 
-        int size1 = new_end-B.begin();
+      int size1 = new_end-B.begin();
 
-        C.resize(size1);
-        thrust::for_each(CountingIterator(0), CountingIterator(0)+size1,
-            setCubeId(thrust::raw_pointer_cast(&*B.begin()),
-                      thrust::raw_pointer_cast(&*C.begin()),
-                      sizeP));
+      C.resize(size1); D.resize(size1); E.resize(size1);
+      thrust::for_each(CountingIterator(0), CountingIterator(0)+size1,
+          setCubeId(thrust::raw_pointer_cast(&*B.begin()),
+                    thrust::raw_pointer_cast(&*C.begin()),
+                    sizeP));
 
-        D.resize(size1);
-        E.resize(size1);
-        new_end1 = thrust::reduce_by_key(C.begin(), C.end(), ConstantIterator(1), D.begin(), E.begin());
+      new_end1 = thrust::reduce_by_key(C.begin(), C.end(), ConstantIterator(1), D.begin(), E.begin());
 
-        thrust::exclusive_scan(E.begin(), E.end(), E.begin());
+      thrust::exclusive_scan(E.begin(), E.end(), E.begin());
 
-        int size2 = thrust::get<0>(new_end1)-D.begin();
+      int size2 = thrust::get<0>(new_end1)-D.begin();
 
-        thrust::for_each(CountingIterator(0), CountingIterator(0)+size2,
-                  freeNodes(thrust::raw_pointer_cast(&*B.begin()),
-                            thrust::raw_pointer_cast(&*D.begin()),
-                            thrust::raw_pointer_cast(&*E.begin()),
-                            thrust::raw_pointer_cast(&*tmpNxt.begin()),
-                            thrust::raw_pointer_cast(&*tmpFree.begin()),
-                            thrust::raw_pointer_cast(&*nodeParent.begin()),
-                            thrust::raw_pointer_cast(&*nodeCount.begin()),
-                            size1, size2));
+      thrust::for_each(CountingIterator(0), CountingIterator(0)+size2,
+                freeNodes(thrust::raw_pointer_cast(&*B.begin()),
+                          thrust::raw_pointer_cast(&*D.begin()),
+                          thrust::raw_pointer_cast(&*E.begin()),
+                          thrust::raw_pointer_cast(&*tmpNxt.begin()),
+                          thrust::raw_pointer_cast(&*tmpFree.begin()),
+                          thrust::raw_pointer_cast(&*nodeParent.begin()),
+                          thrust::raw_pointer_cast(&*nodeCount.begin()),
+                          size1, size2));
 
-        std::cout << "----tmpNxt "; thrust::copy(tmpNxt.begin(), tmpNxt.begin()+2, std::ostream_iterator<long long>(std::cout, " ")); std::cout << std::endl;
-      }
+      std::cout << "----tmpNxt "; thrust::copy(tmpNxt.begin(), tmpNxt.begin()+2, std::ostream_iterator<long long>(std::cout, " ")); std::cout << std::endl;
+
       gettimeofday(&end, 0);
 
       timersub(&mid1, &begin, &diff1);
@@ -1444,16 +1327,19 @@ public:
       std::cout << "Time elapsed " << seconds1 << "s combineFreeLists" << std::endl;
       timersub(&mid2, &mid1, &diff2);
       float seconds2 = diff2.tv_sec + 1.0E-6*diff2.tv_usec;
-      std::cout << "Time elapsed " << seconds2 << "s combineMergeTrees" << std::endl;
+      std::cout << "Time elapsed " << seconds2 << "s combineEdges" << std::endl;
       timersub(&mid3, &mid2, &diff3);
       float seconds3 = diff3.tv_sec + 1.0E-6*diff3.tv_usec;
-      std::cout << "Time elapsed " << seconds3 << "s jumpNodePointers" << std::endl;
+      std::cout << "Time elapsed " << seconds3 << "s combineMergeTrees" << std::endl;
       timersub(&mid4, &mid3, &diff4);
       float seconds4 = diff4.tv_sec + 1.0E-6*diff4.tv_usec;
-      std::cout << "Time elapsed " << seconds4 << "s jumpLeafPointers" << std::endl;
-      timersub(&end, &mid4, &diff5);
+      std::cout << "Time elapsed " << seconds4 << "s jumpNodePointers" << std::endl;
+      timersub(&mid5, &mid4, &diff5);
       float seconds5 = diff5.tv_sec + 1.0E-6*diff5.tv_usec;
-      std::cout << "Time elapsed " << seconds5 << "s freeNodesNew" << std::endl;
+      std::cout << "Time elapsed " << seconds5 << "s jumpLeafPointers" << std::endl;
+      timersub(&end, &mid5, &diff6);
+      float seconds6 = diff6.tv_sec + 1.0E-6*diff6.tv_usec;
+      std::cout << "Time elapsed " << seconds6 << "s freeNodesNew" << std::endl;
 
       timersub(&end, &begin, &diff);
       float seconds = diff.tv_sec + 1.0E-6*diff.tv_usec;
@@ -1502,20 +1388,25 @@ public:
     }
   };
 
-  //sort edges
-  struct sortEdges
+  //combine edges
+  struct combineEdges
   {
     int  sizeP, n;
     unsigned long long numOfCubesOri;
+
+    unsigned long long *cubeId;
+    unsigned long long *cubeMapping;
 
     unsigned long long *edgesSrc, *edgesDes;
     float *edgesWeight;
     int   *edgeStartOfCubes, *edgeSizeOfCubes;
 
     __host__ __device__
-    sortEdges(unsigned long long *edgesSrc, unsigned long long *edgesDes,
+    combineEdges(unsigned long long *cubeMapping, unsigned long long *cubeId,
+        unsigned long long *edgesSrc, unsigned long long *edgesDes,
         float *edgesWeight, int *edgeStartOfCubes, int *edgeSizeOfCubes,
         int sizeP, int n, unsigned long long numOfCubesOri) :
+        cubeMapping(cubeMapping), cubeId(cubeId),
         edgesSrc(edgesSrc), edgesDes(edgesDes), edgesWeight(edgesWeight),
         edgeStartOfCubes(edgeStartOfCubes), edgeSizeOfCubes(edgeSizeOfCubes),
         sizeP(sizeP), n(n), numOfCubesOri(numOfCubesOri) {}
@@ -1527,76 +1418,48 @@ public:
       unsigned long long cubeMiddle = ((sizeP*i+(sizeP/2))<numOfCubesOri) ? sizeP*i+(sizeP/2) : numOfCubesOri-1;
       unsigned long long cubeEnd    = (sizeP*(i+1)<=numOfCubesOri) ? sizeP*(i+1) : numOfCubesOri;
 
-      unsigned long long a = 0; unsigned long long aStart = edgeStartOfCubes[cubeStart];  unsigned long long aSize = edgeSizeOfCubes[cubeStart];
-      unsigned long long b = 0; unsigned long long bStart = edgeStartOfCubes[cubeMiddle]; unsigned long long bSize = edgeSizeOfCubes[cubeMiddle];
+      unsigned long long cubeStartM = cubeMapping[cubeStart];
+      unsigned long long cubeEndM   = cubeMapping[cubeEnd-1];
 
-//      std::cout << cubeStart << " " << cubeMiddle << " " << cubeEnd << " " << aStart << " " << aSize << " " << bStart << " " << bSize << std::endl;
-
-      unsigned long long k = 0; unsigned long long kStart = edgeStartOfCubes[cubeStart];
-      while(a<aSize && b<bSize)
+      unsigned long long k = edgeStartOfCubes[cubeStart];
+      unsigned long long t = edgeStartOfCubes[cubeStart];
+      for(int l=cubeStart; l<cubeEnd; l+=sizeP/n)
       {
-        if(edgesWeight[aStart+a] < edgesWeight[bStart+b])
+        for(int j=edgeStartOfCubes[l]; j<edgeStartOfCubes[l]+edgeSizeOfCubes[l]; j++)
         {
-          edgesSrc[kStart+k]    = edgesSrc[aStart+a];
-          edgesDes[kStart+k]    = edgesDes[aStart+a];
-          edgesWeight[kStart+k] = edgesWeight[aStart+a];
-          a++;
-        }
-        else
-        {
-          if(k==a)
+          int eSrc = edgesSrc[j];
+          int eDes = edgesDes[j];
+
+          float eWeight = edgesWeight[j];
+
+          if(!(cubeId[eSrc]>=cubeStartM && cubeId[eSrc]<=cubeEndM) ||
+             !(cubeId[eDes]>=cubeStartM && cubeId[eDes]<=cubeEndM))
           {
-            unsigned long long src = edgesSrc[aStart+a];
-            unsigned long long des = edgesDes[aStart+a];
-            float weight = edgesWeight[aStart+a];
-
-            edgesSrc[kStart+k]    = edgesSrc[bStart+b];
-            edgesDes[kStart+k]    = edgesDes[bStart+b];
-            edgesWeight[kStart+k] = edgesWeight[bStart+b];
-
-            edgesSrc[bStart+b]    = src;
-            edgesDes[bStart+b]    = des;
-            edgesWeight[bStart+b] = weight;
-            a++;
+            edgesSrc[k]    = edgesSrc[j];
+            edgesDes[k]    = edgesDes[j];
+            edgesWeight[k] = edgesWeight[j];
           }
           else
           {
-            edgesSrc[kStart+k]    = edgesSrc[bStart+b];
-            edgesDes[kStart+k]    = edgesDes[bStart+b];
-            edgesWeight[kStart+k] = edgesWeight[bStart+b];
-            b++;
+            edgesSrc[k]    = edgesSrc[t];
+            edgesDes[k]    = edgesDes[t];
+            edgesWeight[k] = edgesWeight[t];
+
+            edgesSrc[t]    = eSrc;
+            edgesDes[t]    = eDes;
+            edgesWeight[t] = eWeight;
+            t++;
           }
+
+          k++;
         }
-        k++;
       }
 
-      while(a<aSize)
-      {
-        edgesSrc[kStart+k]    = edgesSrc[aStart+a];
-        edgesDes[kStart+k]    = edgesDes[aStart+a];
-        edgesWeight[kStart+k] = edgesWeight[aStart+a];
-        a++;
-        k++;
-      }
-
-      while(b<bSize)
-      {
-//        if(cubeStart==187796 && cubeMiddle==187798)
-//          std::cout << "----" << kStart << " " << k << " " << aSize << " " << bStart << " " << b << " " << bSize << std::endl;
-
-        edgesSrc[kStart+k]    = edgesSrc[bStart+b];
-        edgesDes[kStart+k]    = edgesDes[bStart+b];
-        edgesWeight[kStart+k] = edgesWeight[bStart+b];
-        b++;
-        k++;
-      }
-
-      edgeSizeOfCubes[cubeStart]  = aSize + bSize;
-      edgeSizeOfCubes[cubeMiddle] = 0;
+      edgeSizeOfCubes[cubeStart] = k - edgeStartOfCubes[cubeStart];
     }
   };
 
-  // combine two local merge trees
+  //combine merge trees
   struct combineMergeTrees : public thrust::unary_function<int, void>
   {
     float  min_ll;
@@ -1612,21 +1475,29 @@ public:
     float *edgesWeight;
     int   *edgeStartOfCubes, *edgeSizeOfCubes;
 
-    int *leafParent, *leafParentS;
+    int *leafParent;
     int *nodeParent;
     int *nodeI, *nodeCount;
     float *nodeValue;
+    float *nodeX, *nodeY, *nodeZ;
+    float *nodeVX, *nodeVY, *nodeVZ;
 
     __host__ __device__
-    combineMergeTrees(unsigned long long *cubeMapping, unsigned long long *cubeId, long long *tmpNxt, long long *tmpFree,
-        int *leafParent, int *leafParentS, int *nodeParent,
+    combineMergeTrees(unsigned long long *cubeMapping, unsigned long long *cubeId,
+        long long *tmpNxt, long long *tmpFree,
+        int *leafParent, int *nodeParent,
         int *nodeI, float *nodeValue, int *nodeCount,
+        float *nodeX, float *nodeY, float *nodeZ,
+        float *nodeVX, float *nodeVY, float *nodeVZ,
         unsigned long long *edgesSrc, unsigned long long *edgesDes, float *edgesWeight,
         int *edgeStartOfCubes, int *edgeSizeOfCubes,
         float min_ll, int sizeP, unsigned long long numOfCubesOri) :
-        cubeMapping(cubeMapping), cubeId(cubeId), tmpNxt(tmpNxt), tmpFree(tmpFree),
-        leafParent(leafParent), leafParentS(leafParentS), nodeParent(nodeParent),
+        cubeMapping(cubeMapping), cubeId(cubeId),
+        tmpNxt(tmpNxt), tmpFree(tmpFree),
+        leafParent(leafParent), nodeParent(nodeParent),
         nodeI(nodeI), nodeValue(nodeValue), nodeCount(nodeCount),
+        nodeX(nodeX), nodeY(nodeY), nodeZ(nodeZ),
+        nodeVX(nodeVX), nodeVY(nodeVY), nodeVZ(nodeVZ),
         edgesSrc(edgesSrc), edgesDes(edgesDes), edgesWeight(edgesWeight),
         edgeStartOfCubes(edgeStartOfCubes), edgeSizeOfCubes(edgeSizeOfCubes),
         min_ll(min_ll), sizeP(sizeP), numOfCubesOri(numOfCubesOri) {}
@@ -1643,23 +1514,21 @@ public:
       // get the edges
       unsigned long long k=cubeStart;
       {
-        int size = 0;
         for(int j=edgeStartOfCubes[k]; j<edgeStartOfCubes[k]+edgeSizeOfCubes[k]; j++)
         {
-          unsigned long long eSrc = edgesSrc[j];
-          unsigned long long eDes = edgesDes[j];
+          int eSrc = edgesSrc[j];
+          int eDes = edgesDes[j];
 
           float eWeight = edgesWeight[j];
 
           if(!(cubeId[eSrc]>=cubeStartM && cubeId[eSrc]<=cubeEndM) ||
              !(cubeId[eDes]>=cubeStartM && cubeId[eDes]<=cubeEndM))
           {
-            edgesSrc[edgeStartOfCubes[k] + size] = eSrc;
-            edgesDes[edgeStartOfCubes[k] + size] = eDes;
-            edgesWeight[edgeStartOfCubes[k] + size] = eWeight;
-            size++;
-            continue;
+            edgeSizeOfCubes[k] -= (j-edgeStartOfCubes[k]);
+            edgeStartOfCubes[k] = j;
+            return;
           }
+
 
           // use this edge (e), to combine the merge trees
           //-----------------------------------------------------
@@ -1667,25 +1536,25 @@ public:
           float weight = (eWeight < min_ll) ? min_ll : eWeight;
 
           // find the src & des nodes just below the required weight
-          int src = leafParent[eSrc]; while(nodeParent[src]!=-1 && nodeValue[nodeParent[src]]<=weight) { src = nodeParent[src]; }
-          int des = leafParent[eDes]; while(nodeParent[des]!=-1 && nodeValue[nodeParent[des]]<=weight) { des = nodeParent[des]; }
-
-//          std::cout << count1 << " " << count2 << std::endl;
+          int src = leafParent[eSrc]; while(nodeParent[src]!=-1 && nodeValue[nodeParent[src]]<=weight) src = nodeParent[src];
+          int des = leafParent[eDes]; while(nodeParent[des]!=-1 && nodeValue[nodeParent[des]]<=weight) des = nodeParent[des];
 
           // if src & des already have the same halo id, do NOT do anything
           if(nodeI[src]==nodeI[des]) continue;
 
           if(tmpNxt[cubeStart]==-1)
           {
-            edgesSrc[edgeStartOfCubes[k] + size] = eSrc;
-            edgesDes[edgeStartOfCubes[k] + size] = eDes;
-            edgesWeight[edgeStartOfCubes[k] + size] = eWeight;
-            size++;
-            continue;
+            edgeSizeOfCubes[k] -= (j-edgeStartOfCubes[k]);
+            edgeStartOfCubes[k] = j;
+            return;
           }
 
           int srcCount = nodeCount[src];
           int desCount = nodeCount[des];
+
+          float srcX = nodeX[src]; float desX = nodeX[des]; float srcVX = nodeVX[src]; float desVX = nodeVX[des];
+          float srcY = nodeY[src]; float desY = nodeY[des]; float srcVY = nodeVY[src]; float desVY = nodeVY[des];
+          float srcZ = nodeZ[src]; float desZ = nodeZ[des]; float srcVZ = nodeVZ[src]; float desVZ = nodeVZ[des];
 
           // get the original parents of src & des nodes
           int srcTmp = nodeParent[src];
@@ -1694,6 +1563,7 @@ public:
           // remove the src & des from their parents
           nodeParent[src] = -1;
           nodeParent[des] = -1;
+
 
 
           // set n node
@@ -1720,10 +1590,10 @@ public:
           // set values for the n node
           nodeValue[n] = weight;
           nodeCount[n] = nodeCount[src] + nodeCount[des];
+          nodeX[n] = nodeX[src]+nodeX[des];   nodeVX[n] = nodeVX[src]+nodeVX[des];
+          nodeY[n] = nodeY[src]+nodeY[des];   nodeVY[n] = nodeVY[src]+nodeVY[des];
+          nodeZ[n] = nodeZ[src]+nodeZ[des];   nodeVZ[n] = nodeVZ[src]+nodeVZ[des];
           nodeI[n] = (nodeI[src] < nodeI[des]) ? nodeI[src] : nodeI[des];
-
-          leafParentS[eSrc] = n;
-          leafParentS[eDes] = n;
 
           //fix the loop
           while(srcTmp!=-1 && desTmp!=-1)
@@ -1734,6 +1604,12 @@ public:
               nodeI[srcTmp] = (nodeI[srcTmp]<nodeI[n]) ? nodeI[srcTmp] : nodeI[n];
               srcCount = nodeCount[srcTmp];
               nodeCount[srcTmp] += desCount;
+              srcX = nodeX[srcTmp];   srcVX = nodeVX[srcTmp];
+              srcY = nodeY[srcTmp];   srcVY = nodeVY[srcTmp];
+              srcZ = nodeZ[srcTmp];   srcVZ = nodeVZ[srcTmp];
+              nodeX[srcTmp] += desX;  nodeVX[srcTmp] += desVX;
+              nodeY[srcTmp] += desY;  nodeVY[srcTmp] += desVY;
+              nodeZ[srcTmp] += desZ;  nodeVZ[srcTmp] += desVZ;
 
               n = srcTmp;
               srcTmp = nodeParent[srcTmp];
@@ -1746,6 +1622,12 @@ public:
               nodeI[desTmp] = (nodeI[desTmp]<nodeI[n]) ? nodeI[desTmp] : nodeI[n];
               desCount = nodeCount[desTmp];
               nodeCount[desTmp] += srcCount;
+              desX = nodeX[desTmp];   desVX = nodeVX[desTmp];
+              desY = nodeY[desTmp];   desVY = nodeVY[desTmp];
+              desZ = nodeZ[desTmp];   desVZ = nodeVZ[desTmp];
+              nodeX[desTmp] += srcX;  nodeVX[desTmp] += srcVX;
+              nodeY[desTmp] += srcY;  nodeVY[desTmp] += srcVY;
+              nodeZ[desTmp] += srcZ;  nodeVZ[desTmp] += srcVZ;
 
               n = desTmp;
               desTmp = nodeParent[desTmp];
@@ -1768,6 +1650,9 @@ public:
 
                 nodeI[srcTmp] = (nodeI[srcTmp]<nodeI[desTmp]) ? nodeI[srcTmp] : nodeI[desTmp];
                 nodeCount[srcTmp] += nodeCount[desTmp];
+                nodeX[srcTmp] += nodeX[desTmp];  nodeVX[srcTmp] += nodeVX[desTmp];
+                nodeY[srcTmp] += nodeY[desTmp];  nodeVY[srcTmp] += nodeVY[desTmp];
+                nodeZ[srcTmp] += nodeZ[desTmp];  nodeVZ[srcTmp] += nodeVZ[desTmp];
 
                 n = srcTmp;
                 srcTmp = srcParentTmp;
@@ -1791,6 +1676,12 @@ public:
             nodeI[srcTmp] = (nodeI[srcTmp]<nodeI[n]) ? nodeI[srcTmp] : nodeI[n];
             srcCount = nodeCount[srcTmp];
             nodeCount[srcTmp] += desCount;
+            srcX = nodeX[srcTmp];   srcVX = nodeVX[srcTmp];
+            srcY = nodeY[srcTmp];   srcVY = nodeVY[srcTmp];
+            srcZ = nodeZ[srcTmp];   srcVZ = nodeVZ[srcTmp];
+            nodeX[srcTmp] += desX;  nodeVX[srcTmp] += desVX;
+            nodeY[srcTmp] += desY;  nodeVY[srcTmp] += desVY;
+            nodeZ[srcTmp] += desZ;  nodeVZ[srcTmp] += desVZ;
 
             n = srcTmp;
             srcTmp = nodeParent[srcTmp];
@@ -1803,273 +1694,20 @@ public:
             nodeI[desTmp] = (nodeI[desTmp]<nodeI[n]) ? nodeI[desTmp] : nodeI[n];
             desCount = nodeCount[desTmp];
             nodeCount[desTmp] += srcCount;
+            desX = nodeX[desTmp];   desVX = nodeVX[desTmp];
+            desY = nodeY[desTmp];   desVY = nodeVY[desTmp];
+            desZ = nodeZ[desTmp];   desVZ = nodeVZ[desTmp];
+            nodeX[desTmp] += srcX;  nodeVX[desTmp] += srcVX;
+            nodeY[desTmp] += srcY;  nodeVY[desTmp] += srcVY;
+            nodeZ[desTmp] += srcZ;  nodeVZ[desTmp] += srcVZ;
 
             n = desTmp;
             desTmp = nodeParent[desTmp];
           }
-
         }
-
-        edgeSizeOfCubes[k] = size;
       }
     }
   };
-
-//  struct combineMergeTrees : public thrust::unary_function<int, void>
-//  {
-//    float  min_ll;
-//    int    sizeP;
-//    unsigned long long numOfCubesOri;
-//
-//    unsigned long long *cubeId;
-//    unsigned long long *cubeMapping;
-//
-//    long long *tmpNxt, *tmpFree;
-//
-//    unsigned long long *edgesSrc, *edgesDes;
-//    float *edgesWeight;
-//    int   *edgeStartOfCubes, *edgeSizeOfCubes;
-//
-//    int *leafParent;
-//    int *nodeParent;
-//    int *nodeI, *nodeCount;
-//    float *nodeValue;
-//    float *nodeX, *nodeY, *nodeZ;
-//    float *nodeVX, *nodeVY, *nodeVZ;
-//
-//    __host__ __device__
-//    combineMergeTrees(unsigned long long *cubeMapping, unsigned long long *cubeId, long long *tmpNxt, long long *tmpFree,
-//        int *leafParent, int *nodeParent,
-//        int *nodeI, float *nodeValue, int *nodeCount,
-//        float *nodeX, float *nodeY, float *nodeZ,
-//        float *nodeVX, float *nodeVY, float *nodeVZ,
-//        unsigned long long *edgesSrc, unsigned long long *edgesDes, float *edgesWeight,
-//        int *edgeStartOfCubes, int *edgeSizeOfCubes,
-//        float min_ll, int sizeP, unsigned long long numOfCubesOri) :
-//        cubeMapping(cubeMapping), cubeId(cubeId), tmpNxt(tmpNxt), tmpFree(tmpFree),
-//        leafParent(leafParent), nodeParent(nodeParent),
-//        nodeI(nodeI), nodeValue(nodeValue), nodeCount(nodeCount),
-//        nodeX(nodeX), nodeY(nodeY), nodeZ(nodeZ),
-//        nodeVX(nodeVX), nodeVY(nodeVY), nodeVZ(nodeVZ),
-//        edgesSrc(edgesSrc), edgesDes(edgesDes), edgesWeight(edgesWeight),
-//        edgeStartOfCubes(edgeStartOfCubes), edgeSizeOfCubes(edgeSizeOfCubes),
-//        min_ll(min_ll), sizeP(sizeP), numOfCubesOri(numOfCubesOri) {}
-//
-//    __host__ __device__
-//    void operator()(int i)
-//    {
-//      unsigned long long cubeStart = sizeP*i;
-//      unsigned long long cubeEnd   = (sizeP*(i+1)<numOfCubesOri) ? sizeP*(i+1) : numOfCubesOri;
-//
-//      unsigned long long cubeStartM = cubeMapping[cubeStart];
-//      unsigned long long cubeEndM   = cubeMapping[cubeEnd-1];
-//
-//      // get the edges
-//      for(unsigned long long k=cubeStart; k<cubeEnd; k++)
-//      {
-//        int size = 0;
-//        for(int j=edgeStartOfCubes[k]; j<edgeStartOfCubes[k]+edgeSizeOfCubes[k]; j++)
-//        {
-//          int eSrc = edgesSrc[j];
-//          int eDes = edgesDes[j];
-//
-//          float eWeight = edgesWeight[j];
-//
-//          if(!(cubeId[eSrc]>=cubeStartM && cubeId[eSrc]<=cubeEndM) ||
-//             !(cubeId[eDes]>=cubeStartM && cubeId[eDes]<=cubeEndM))
-//          {
-//            edgesSrc[edgeStartOfCubes[k] + size] = eSrc;
-//            edgesDes[edgeStartOfCubes[k] + size] = eDes;
-//            edgesWeight[edgeStartOfCubes[k] + size] = eWeight;
-//            size++;
-//            continue;
-//          }
-//
-//
-//          // use this edge (e), to combine the merge trees
-//          //-----------------------------------------------------
-//
-//          float weight = (eWeight < min_ll) ? min_ll : eWeight;
-//
-//          // find the src & des nodes just below the required weight
-//          int src = leafParent[eSrc]; while(nodeParent[src]!=-1 && nodeValue[nodeParent[src]]<=weight) src = nodeParent[src];
-//          int des = leafParent[eDes]; while(nodeParent[des]!=-1 && nodeValue[nodeParent[des]]<=weight) des = nodeParent[des];
-//
-//          // if src & des already have the same halo id, do NOT do anything
-//          if(nodeI[src]==nodeI[des]) continue;
-//
-//          if(tmpNxt[cubeStart]==-1)
-//          {
-//            edgesSrc[edgeStartOfCubes[k] + size] = eSrc;
-//            edgesDes[edgeStartOfCubes[k] + size] = eDes;
-//            edgesWeight[edgeStartOfCubes[k] + size] = eWeight;
-//            size++;
-//            continue;
-//          }
-//
-//          int srcCount = nodeCount[src];
-//          int desCount = nodeCount[des];
-//
-//          float srcX = nodeX[src]; float desX = nodeX[des]; float srcVX = nodeVX[src]; float desVX = nodeVX[des];
-//          float srcY = nodeY[src]; float desY = nodeY[des]; float srcVY = nodeVY[src]; float desVY = nodeVY[des];
-//          float srcZ = nodeZ[src]; float desZ = nodeZ[des]; float srcVZ = nodeVZ[src]; float desVZ = nodeVZ[des];
-//
-//          // get the original parents of src & des nodes
-//          int srcTmp = nodeParent[src];
-//          int desTmp = nodeParent[des];
-//
-//          // remove the src & des from their parents
-//          nodeParent[src] = -1;
-//          nodeParent[des] = -1;
-//
-//
-//
-//          // set n node
-//          int n;
-//          if(nodeValue[src]==weight && nodeValue[des]==weight) // merge src & des, then fix the loop
-//          { n = src; nodeParent[des] = n; }
-//          else if(nodeValue[src]==weight) // set des node's parent to be src, set n to src, then fix the loop
-//          { n = src; nodeParent[des] = n; }
-//          else if(nodeValue[des]==weight) // set src node's parent to be des, set n to des, then fix the loop
-//          { n = des; nodeParent[src] = n; }
-//          else if(nodeValue[src]!=weight && nodeValue[des]!=weight) // create a new node, set it as parent of both src & des, then fix the loop
-//          {
-//            if(tmpNxt[cubeStart]!=-1)
-//            {
-//              n = tmpNxt[cubeStart];
-//              int tmpVal = tmpFree[tmpNxt[cubeStart]];
-//              tmpFree[tmpNxt[cubeStart]] = -2;
-//              tmpNxt[cubeStart] = tmpVal;
-//
-//              nodeParent[src] = n;  nodeParent[des] = n;
-//            }
-//          }
-//
-//          // set values for the n node
-//          nodeValue[n] = weight;
-//          nodeCount[n] = nodeCount[src] + nodeCount[des];
-//          nodeX[n] = nodeX[src]+nodeX[des];   nodeVX[n] = nodeVX[src]+nodeVX[des];
-//          nodeY[n] = nodeY[src]+nodeY[des];   nodeVY[n] = nodeVY[src]+nodeVY[des];
-//          nodeZ[n] = nodeZ[src]+nodeZ[des];   nodeVZ[n] = nodeVZ[src]+nodeVZ[des];
-//          nodeI[n] = (nodeI[src] < nodeI[des]) ? nodeI[src] : nodeI[des];
-//
-//          //fix the loop
-//          while(srcTmp!=-1 && desTmp!=-1)
-//          {
-//            if(nodeValue[srcTmp] < nodeValue[desTmp])
-//            {
-//              nodeParent[n] = srcTmp;
-//              nodeI[srcTmp] = (nodeI[srcTmp]<nodeI[n]) ? nodeI[srcTmp] : nodeI[n];
-//              srcCount = nodeCount[srcTmp];
-//              nodeCount[srcTmp] += desCount;
-//              srcX = nodeX[srcTmp];   srcVX = nodeVX[srcTmp];
-//              srcY = nodeY[srcTmp];   srcVY = nodeVY[srcTmp];
-//              srcZ = nodeZ[srcTmp];   srcVZ = nodeVZ[srcTmp];
-//              nodeX[srcTmp] += desX;  nodeVX[srcTmp] += desVX;
-//              nodeY[srcTmp] += desY;  nodeVY[srcTmp] += desVY;
-//              nodeZ[srcTmp] += desZ;  nodeVZ[srcTmp] += desVZ;
-//
-//              n = srcTmp;
-//              srcTmp = nodeParent[srcTmp];
-//
-//              nodeParent[n] = -1;
-//            }
-//            else if(nodeValue[srcTmp] > nodeValue[desTmp])
-//            {
-//              nodeParent[n] = desTmp;
-//              nodeI[desTmp] = (nodeI[desTmp]<nodeI[n]) ? nodeI[desTmp] : nodeI[n];
-//              desCount = nodeCount[desTmp];
-//              nodeCount[desTmp] += srcCount;
-//              desX = nodeX[desTmp];   desVX = nodeVX[desTmp];
-//              desY = nodeY[desTmp];   desVY = nodeVY[desTmp];
-//              desZ = nodeZ[desTmp];   desVZ = nodeVZ[desTmp];
-//              nodeX[desTmp] += srcX;  nodeVX[desTmp] += srcVX;
-//              nodeY[desTmp] += srcY;  nodeVY[desTmp] += srcVY;
-//              nodeZ[desTmp] += srcZ;  nodeVZ[desTmp] += srcVZ;
-//
-//              n = desTmp;
-//              desTmp = nodeParent[desTmp];
-//
-//              nodeParent[n] = -1;
-//            }
-//            else if(nodeValue[srcTmp] == nodeValue[desTmp])
-//            {
-//              while(nodeParent[srcTmp]!=-1 && nodeValue[srcTmp]==nodeValue[nodeParent[srcTmp]]) srcTmp = nodeParent[srcTmp];
-//              while(nodeParent[desTmp]!=-1 && nodeValue[desTmp]==nodeValue[nodeParent[desTmp]]) desTmp = nodeParent[desTmp];
-//
-//              nodeParent[n] = srcTmp;
-//
-//              if(nodeI[srcTmp] != nodeI[desTmp]) // combine srcTmp & desTmp
-//              {
-//                int srcParentTmp = nodeParent[srcTmp];
-//                int desParentTmp = nodeParent[desTmp];
-//
-//                nodeParent[desTmp] = srcTmp;
-//
-//                nodeI[srcTmp] = (nodeI[srcTmp]<nodeI[desTmp]) ? nodeI[srcTmp] : nodeI[desTmp];
-//                nodeCount[srcTmp] += nodeCount[desTmp];
-//                nodeX[srcTmp] += nodeX[desTmp];  nodeVX[srcTmp] += nodeVX[desTmp];
-//                nodeY[srcTmp] += nodeY[desTmp];  nodeVY[srcTmp] += nodeVY[desTmp];
-//                nodeZ[srcTmp] += nodeZ[desTmp];  nodeVZ[srcTmp] += nodeVZ[desTmp];
-//
-//                n = srcTmp;
-//                srcTmp = srcParentTmp;
-//                desTmp = desParentTmp;
-//
-//                nodeParent[n] = -1;
-//              }
-//              else
-//              {
-//                srcTmp = -1;  desTmp = -1;
-//                break;
-//              }
-//            }
-//          }
-//
-//
-//
-//          if(srcTmp!=-1) nodeParent[n] = srcTmp;
-//          while(srcTmp!=-1)
-//          {
-//            nodeI[srcTmp] = (nodeI[srcTmp]<nodeI[n]) ? nodeI[srcTmp] : nodeI[n];
-//            srcCount = nodeCount[srcTmp];
-//            nodeCount[srcTmp] += desCount;
-//            srcX = nodeX[srcTmp];   srcVX = nodeVX[srcTmp];
-//            srcY = nodeY[srcTmp];   srcVY = nodeVY[srcTmp];
-//            srcZ = nodeZ[srcTmp];   srcVZ = nodeVZ[srcTmp];
-//            nodeX[srcTmp] += desX;  nodeVX[srcTmp] += desVX;
-//            nodeY[srcTmp] += desY;  nodeVY[srcTmp] += desVY;
-//            nodeZ[srcTmp] += desZ;  nodeVZ[srcTmp] += desVZ;
-//
-//            n = srcTmp;
-//            srcTmp = nodeParent[srcTmp];
-//          }
-//
-//
-//          if(desTmp!=-1) nodeParent[n] = desTmp;
-//          while(desTmp!=-1)
-//          {
-//            nodeI[desTmp] = (nodeI[desTmp]<nodeI[n]) ? nodeI[desTmp] : nodeI[n];
-//            desCount = nodeCount[desTmp];
-//            nodeCount[desTmp] += srcCount;
-//            desX = nodeX[desTmp];   desVX = nodeVX[desTmp];
-//            desY = nodeY[desTmp];   desVY = nodeVY[desTmp];
-//            desZ = nodeZ[desTmp];   desVZ = nodeVZ[desTmp];
-//            nodeX[desTmp] += srcX;  nodeVX[desTmp] += srcVX;
-//            nodeY[desTmp] += srcY;  nodeVY[desTmp] += srcVY;
-//            nodeZ[desTmp] += srcZ;  nodeVZ[desTmp] += srcVZ;
-//
-//            n = desTmp;
-//            desTmp = nodeParent[desTmp];
-//          }
-//
-//          //-----------------------------------------------------
-//        }
-//
-//        edgeSizeOfCubes[k] = size;
-//      }
-//    }
-//  };
 
   // jump node's parent pointers
   struct jumpNodePointers : public thrust::unary_function<int, void>
@@ -2118,26 +1756,6 @@ public:
     }
   };
 
-  // set correct leafParentS
-  struct setLeafParentS : public thrust::unary_function<int, void>
-  {
-    int   *nodeParent, *leafParentS;
-
-    __host__ __device__
-    setLeafParentS(int *nodeParent, int *leafParentS) :
-    nodeParent(nodeParent), leafParentS(leafParentS) {}
-
-    __host__ __device__
-    void operator()(int i)
-    {
-      int tmp = leafParentS[i];
-
-      while(nodeParent[tmp]!=-1) tmp = nodeParent[tmp];
-
-      leafParentS[i] = tmp; //jump pointers
-    }
-  };
-
   //check if a node is used
   struct isUsed
   {
@@ -2148,7 +1766,7 @@ public:
     __host__ __device__
     bool operator()(const int i)
     {
-      return nodeCount[i]!=-1;
+      return (nodeCount[i]!=-1);
     }
   };
 
@@ -2235,4 +1853,3 @@ public:
 }
 
 #endif
-
