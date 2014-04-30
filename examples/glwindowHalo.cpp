@@ -66,7 +66,7 @@ halo *haloFinder;
 // parameters needed for the halo_finder (look at halo_finder.h for definitions)
 float linkLength, max_linkLength, min_linkLength;
 int   particleSize, max_particleSize, min_particleSize;
-int   rL, np, n, k;
+int   rL, np, n;
 float xscal;
 
 bool  haloFound, haloShow;
@@ -107,32 +107,29 @@ QSize GLWindowHalo::sizeHint() const
 
 bool GLWindowHalo::initialize(int argc, char *argv[])
 {
-  char filename[1024]; // set file name
+  char filename[1024];
   sprintf(filename, "%s/%s", STRINGIZE_VALUE_OF(DATA_DIRECTORY), argv[1]);
   std::string format = argv[2];
 
   min_linkLength = atof(argv[3]);
   max_linkLength = atof(argv[4]);
   linkLength     = min_linkLength;
-
-  min_particleSize = atof(argv[5]);
-  max_particleSize = atof(argv[6]);
-  particleSize     = min_particleSize;
-
-  // np - 128 & rL -150 for .hcosmo file
-  // np - 256 & rL -64  for .cosmo file
-  np = atoi(argv[7]);  // number of particles in one dimension
-  rL = atof(argv[8]);  // box length at a side
-  n  = atoi(argv[9]);  // if you want a fraction of the file to load, use this.. 1/n
-  k  = atoi(argv[10]); // k-way merge for global step in dendogram based halo finder
+	
+	min_particleSize = atof(argv[5]);
+	max_particleSize = atof(argv[6]);
+  particleSize     = min_particleSize;	
 
 	haloFound = haloShow = false;
+
+  np = atof(argv[7]);
+  rL = atof(argv[8]);
+  n  = atof(argv[9]); //if you want a fraction of the file to load, use this.. 1/n
 
 	// scale amount for particles
   if(rL==-1) xscal = 1;
   else       xscal = rL / (1.0*np);
 
-  haloFinder = new halo_merge(min_linkLength, max_linkLength, k, filename, format, n, np, rL);
+  haloFinder = new halo_merge(min_linkLength, max_linkLength, filename, format, n, np, rL);
 
   return true;
 }

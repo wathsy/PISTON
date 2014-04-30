@@ -3,6 +3,10 @@
 
 #include <piston/halo.h>
 
+#include <thrust/transform.h>
+#include <omp.h>
+#include <thrust/system/omp/vector.h> 
+
 // When TEST is defined, output all results
 //#define TEST
 
@@ -1196,16 +1200,77 @@ public:
   // merge local merge trees to create the global merge tree
   void globalStep()
   {
+    struct timeval begin1, end1, diff1;
+
+    gettimeofday(&begin1, 0);
     unsigned long long cubesOri = cubes;
     int sizeP = 1;
 
-    thrust::device_vector<long long>::iterator new_end;
-    thrust::pair<thrust::device_vector<long long>::iterator, thrust::device_vector<long long>::iterator> new_end1;
+    int sizeCounter = (numOfParticles > 2*cubesOri) ? numOfParticles : 2*cubesOri;
+		thrust::omp::vector<long long> counter(sizeCounter);
+		thrust::sequence(counter.begin(), counter.end());
 
-    thrust::device_vector<long long> A(2*cubesOri);
-    thrust::device_vector<long long> B(2*cubesOri);
-    thrust::device_vector<long long> C,D,E;
+    thrust::omp::vector<long long>::iterator new_end;
+    thrust::pair<thrust::omp::vector<long long>::iterator, thrust::omp::vector<long long>::iterator> new_end1;
+
+    thrust::omp::vector<long long> A(2*cubesOri);
+    thrust::omp::vector<long long> B(2*cubesOri);
+    thrust::omp::vector<long long> C,D,E;
     thrust::sequence(A.begin(), A.end());
+
+		thrust::omp::vector<long long> tmpNxt_omp(cubes);
+		thrust::omp::vector<long long> tmpEnd_omp(cubes);
+		thrust::omp::vector<long long> tmpFree_omp(2*cubes);
+
+		thrust::omp::vector<unsigned long long> cubeMapping_omp(cubes);
+		thrust::omp::vector<unsigned long long> cubeId_omp(numOfParticles);
+		thrust::omp::vector<unsigned long long> edgesSrc_omp(numOfEdges);
+		thrust::omp::vector<unsigned long long> edgesDes_omp(numOfEdges);
+		thrust::omp::vector<float> edgesWeight_omp(numOfEdges);
+		thrust::omp::vector<int> edgeStartOfCubes_omp(cubes);
+		thrust::omp::vector<int> edgeSizeOfCubes_omp(cubes);
+
+		thrust::omp::vector<int> leafParent_omp(numOfParticles);
+		thrust::omp::vector<int> nodeParent_omp(2*cubes);
+		thrust::omp::vector<int> nodeI_omp(2*cubes);
+		thrust::omp::vector<float> nodeValue_omp(2*cubes);
+		thrust::omp::vector<int> nodeCount_omp(2*cubes);
+		thrust::omp::vector<float> nodeX_omp(2*cubes);
+		thrust::omp::vector<float> nodeY_omp(2*cubes);
+		thrust::omp::vector<float> nodeZ_omp(2*cubes);
+		thrust::omp::vector<float> nodeVX_omp(2*cubes);
+		thrust::omp::vector<float> nodeVY_omp(2*cubes);
+		thrust::omp::vector<float> nodeVZ_omp(2*cubes);
+
+		thrust::copy(tmpNxt.begin(), tmpNxt.end(), tmpNxt_omp.begin());
+		thrust::copy(tmpEnd.begin(), tmpEnd.end(), tmpEnd_omp.begin());
+		thrust::copy(tmpFree.begin(), tmpFree.end(), tmpFree_omp.begin());
+
+		thrust::copy(cubeMapping.begin(), cubeMapping.end(), cubeMapping_omp.begin());
+		thrust::copy(cubeId.begin(), cubeId.end(), cubeId_omp.begin());
+		thrust::copy(edgesSrc.begin(), edgesSrc.end(), edgesSrc_omp.begin());
+		thrust::copy(edgesDes.begin(), edgesDes.end(), edgesDes_omp.begin());
+		thrust::copy(edgesWeight.begin(), edgesWeight.end(), edgesWeight_omp.begin());
+		thrust::copy(edgeStartOfCubes.begin(), edgeStartOfCubes.end(), edgeStartOfCubes_omp.begin());
+		thrust::copy(edgeSizeOfCubes.begin(), edgeSizeOfCubes.end(), edgeSizeOfCubes_omp.begin());
+
+		thrust::copy(leafParent.begin(), leafParent.end(), leafParent_omp.begin());
+		thrust::copy(nodeParent.begin(), nodeParent.end(), nodeParent_omp.begin());
+		thrust::copy(nodeI.begin(), nodeI.end(), nodeI_omp.begin());
+		thrust::copy(nodeValue.begin(), nodeValue.end(), nodeValue_omp.begin());
+		thrust::copy(nodeCount.begin(), nodeCount.end(), nodeCount_omp.begin());
+		thrust::copy(nodeX.begin(), nodeX.end(), nodeX_omp.begin());
+		thrust::copy(nodeY.begin(), nodeY.end(), nodeY_omp.begin());
+		thrust::copy(nodeZ.begin(), nodeZ.end(), nodeZ_omp.begin());
+		thrust::copy(nodeVX.begin(), nodeVX.end(), nodeVX_omp.begin());
+		thrust::copy(nodeVY.begin(), nodeVY.end(), nodeVY_omp.begin());
+		thrust::copy(nodeVZ.begin(), nodeVZ.end(), nodeVZ_omp.begin());
+		std::cout << "----nodeVZ_omp "; thrust::copy(nodeVZ_omp.begin(), nodeVZ_omp.begin()+2, std::ostream_iterator<long long>(std::cout, " ")); std::cout << std::endl;
+		gettimeofday(&end1, 0);
+
+		timersub(&end1, &begin1, &diff1);
+    float seconds1 = diff1.tv_sec + 1.0E-6*diff1.tv_usec;
+    std::cout << "StartCopyTime : " << seconds1 << "s" << std::endl;
 
     // iteratively combine the cubes two at a time
     int i = 0;
@@ -1219,84 +1284,84 @@ public:
       {
         sizeP *= k;
         cubes = (int)std::ceil(((double)cubes/k));
-        thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
-                  combineFreeLists(thrust::raw_pointer_cast(&*tmpNxt.begin()),
-                                   thrust::raw_pointer_cast(&*tmpEnd.begin()),
-                                   thrust::raw_pointer_cast(&*tmpFree.begin()),
+        thrust::for_each(counter.begin(), counter.begin()+cubes,
+                  combineFreeLists(thrust::raw_pointer_cast(&*tmpNxt_omp.begin()),
+                                   thrust::raw_pointer_cast(&*tmpEnd_omp.begin()),
+                                   thrust::raw_pointer_cast(&*tmpFree_omp.begin()),
                                    sizeP, k, cubesOri));
       }
       else if(cubes==1) break;
 
-      std::cout << "----tmpNxt "; thrust::copy(tmpNxt.begin(), tmpNxt.begin()+2, std::ostream_iterator<long long>(std::cout, " ")); std::cout << std::endl;
+      std::cout << "----tmpNxt_omp "; thrust::copy(tmpNxt_omp.begin(), tmpNxt_omp.begin()+2, std::ostream_iterator<long long>(std::cout, " ")); std::cout << std::endl;
 
       gettimeofday(&mid1, 0);
 
       //combine edges
-      thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
-            combineEdges(thrust::raw_pointer_cast(&*cubeMapping.begin()),
-                         thrust::raw_pointer_cast(&*cubeId.begin()),
-                         thrust::raw_pointer_cast(&*edgesSrc.begin()),
-                         thrust::raw_pointer_cast(&*edgesDes.begin()),
-                         thrust::raw_pointer_cast(&*edgesWeight.begin()),
-                         thrust::raw_pointer_cast(&*edgeStartOfCubes.begin()),
-                         thrust::raw_pointer_cast(&*edgeSizeOfCubes.begin()),
+      thrust::for_each(counter.begin(), counter.begin()+cubes,
+            combineEdges(thrust::raw_pointer_cast(&*cubeMapping_omp.begin()),
+                         thrust::raw_pointer_cast(&*cubeId_omp.begin()),
+                         thrust::raw_pointer_cast(&*edgesSrc_omp.begin()),
+                         thrust::raw_pointer_cast(&*edgesDes_omp.begin()),
+                         thrust::raw_pointer_cast(&*edgesWeight_omp.begin()),
+                         thrust::raw_pointer_cast(&*edgeStartOfCubes_omp.begin()),
+                         thrust::raw_pointer_cast(&*edgeSizeOfCubes_omp.begin()),
                          sizeP, k, cubesOri));
 
-      std::cout << "----edgesSrc "; thrust::copy(edgesSrc.begin(), edgesSrc.begin()+2, std::ostream_iterator<long long>(std::cout, " ")); std::cout << std::endl;
+      std::cout << "----edgesSrc_omp "; thrust::copy(edgesSrc_omp.begin(), edgesSrc_omp.begin()+2, std::ostream_iterator<long long>(std::cout, " ")); std::cout << std::endl;
 
       gettimeofday(&mid2, 0);
 
-      thrust::for_each(CountingIterator(0), CountingIterator(0)+cubes,
-        combineMergeTrees(thrust::raw_pointer_cast(&*cubeMapping.begin()),
-                          thrust::raw_pointer_cast(&*cubeId.begin()),
-                          thrust::raw_pointer_cast(&*tmpNxt.begin()),
-                          thrust::raw_pointer_cast(&*tmpFree.begin()),
-                          thrust::raw_pointer_cast(&*leafParent.begin()),
-                          thrust::raw_pointer_cast(&*nodeParent.begin()),
-                          thrust::raw_pointer_cast(&*nodeI.begin()),
-                          thrust::raw_pointer_cast(&*nodeValue.begin()),
-                          thrust::raw_pointer_cast(&*nodeCount.begin()),
-                          thrust::raw_pointer_cast(&*nodeX.begin()),
-                          thrust::raw_pointer_cast(&*nodeY.begin()),
-                          thrust::raw_pointer_cast(&*nodeZ.begin()),
-                          thrust::raw_pointer_cast(&*nodeVX.begin()),
-                          thrust::raw_pointer_cast(&*nodeVY.begin()),
-                          thrust::raw_pointer_cast(&*nodeVZ.begin()),
-                          thrust::raw_pointer_cast(&*edgesSrc.begin()),
-                          thrust::raw_pointer_cast(&*edgesDes.begin()),
-                          thrust::raw_pointer_cast(&*edgesWeight.begin()),
-                          thrust::raw_pointer_cast(&*edgeStartOfCubes.begin()),
-                          thrust::raw_pointer_cast(&*edgeSizeOfCubes.begin()),
+      thrust::for_each(counter.begin(), counter.begin()+cubes,
+        combineMergeTrees(thrust::raw_pointer_cast(&*cubeMapping_omp.begin()),
+                          thrust::raw_pointer_cast(&*cubeId_omp.begin()),
+                          thrust::raw_pointer_cast(&*tmpNxt_omp.begin()),
+                          thrust::raw_pointer_cast(&*tmpFree_omp.begin()),
+                          thrust::raw_pointer_cast(&*leafParent_omp.begin()),
+                          thrust::raw_pointer_cast(&*nodeParent_omp.begin()),
+                          thrust::raw_pointer_cast(&*nodeI_omp.begin()),
+                          thrust::raw_pointer_cast(&*nodeValue_omp.begin()),
+                          thrust::raw_pointer_cast(&*nodeCount_omp.begin()),
+                          thrust::raw_pointer_cast(&*nodeX_omp.begin()),
+                          thrust::raw_pointer_cast(&*nodeY_omp.begin()),
+                          thrust::raw_pointer_cast(&*nodeZ_omp.begin()),
+                          thrust::raw_pointer_cast(&*nodeVX_omp.begin()),
+                          thrust::raw_pointer_cast(&*nodeVY_omp.begin()),
+                          thrust::raw_pointer_cast(&*nodeVZ_omp.begin()),
+                          thrust::raw_pointer_cast(&*edgesSrc_omp.begin()),
+                          thrust::raw_pointer_cast(&*edgesDes_omp.begin()),
+                          thrust::raw_pointer_cast(&*edgesWeight_omp.begin()),
+                          thrust::raw_pointer_cast(&*edgeStartOfCubes_omp.begin()),
+                          thrust::raw_pointer_cast(&*edgeSizeOfCubes_omp.begin()),
                           min_ll, sizeP, cubesOri));
 
-      std::cout << "----nodeParent "; thrust::copy(nodeParent.begin(), nodeParent.begin()+2, std::ostream_iterator<int>(std::cout, " ")); std::cout << " ";
+      std::cout << "----nodeParent_omp "; thrust::copy(nodeParent_omp.begin(), nodeParent_omp.begin()+2, std::ostream_iterator<int>(std::cout, " ")); std::cout << " ";
 
       gettimeofday(&mid3, 0);
 
-      thrust::for_each(CountingIterator(0), CountingIterator(0)+2*cubesOri,
-          jumpNodePointers(thrust::raw_pointer_cast(&*nodeParent.begin()),
-                           thrust::raw_pointer_cast(&*nodeCount.begin()),
-                           thrust::raw_pointer_cast(&*nodeValue.begin())));
+      thrust::for_each(counter.begin(), counter.begin()+2*cubesOri,
+          jumpNodePointers(thrust::raw_pointer_cast(&*nodeParent_omp.begin()),
+                           thrust::raw_pointer_cast(&*nodeCount_omp.begin()),
+                           thrust::raw_pointer_cast(&*nodeValue_omp.begin())));
 
-      std::cout << "----nodeParent "; thrust::copy(nodeParent.begin(), nodeParent.begin()+2, std::ostream_iterator<int>(std::cout, " ")); std::cout << " ";
+      std::cout << "----nodeParent_omp "; thrust::copy(nodeParent_omp.begin(), nodeParent_omp.begin()+2, std::ostream_iterator<int>(std::cout, " ")); std::cout << " ";
 
       gettimeofday(&mid4, 0);
 
-      thrust::for_each(CountingIterator(0), CountingIterator(0)+numOfParticles,
-          jumpLeafPointers(thrust::raw_pointer_cast(&*leafParent.begin()),
-                           thrust::raw_pointer_cast(&*nodeParent.begin()),
-                           thrust::raw_pointer_cast(&*nodeValue.begin())));
+      thrust::for_each(counter.begin(), counter.begin()+numOfParticles,
+          jumpLeafPointers(thrust::raw_pointer_cast(&*leafParent_omp.begin()),
+                           thrust::raw_pointer_cast(&*nodeParent_omp.begin()),
+                           thrust::raw_pointer_cast(&*nodeValue_omp.begin())));
 
-      std::cout << "----leafParent "; thrust::copy(leafParent.begin(), leafParent.begin()+2, std::ostream_iterator<int>(std::cout, " ")); std::cout << " ";
+      std::cout << "----leafParent_omp "; thrust::copy(leafParent_omp.begin(), leafParent_omp.begin()+2, std::ostream_iterator<int>(std::cout, " ")); std::cout << " ";
 
       gettimeofday(&mid5, 0);
 
-      new_end = thrust::remove_copy_if(A.begin(), A.end(), B.begin(), isUsed(thrust::raw_pointer_cast(&*nodeCount.begin())));
+      new_end = thrust::remove_copy_if(A.begin(), A.end(), B.begin(), isUsed(thrust::raw_pointer_cast(&*nodeCount_omp.begin())));
 
       int size1 = new_end-B.begin();
 
       C.resize(size1); D.resize(size1); E.resize(size1);
-      thrust::for_each(CountingIterator(0), CountingIterator(0)+size1,
+      thrust::for_each(counter.begin(), counter.begin()+size1,
           setCubeId(thrust::raw_pointer_cast(&*B.begin()),
                     thrust::raw_pointer_cast(&*C.begin()),
                     sizeP));
@@ -1307,17 +1372,24 @@ public:
 
       int size2 = thrust::get<0>(new_end1)-D.begin();
 
-      thrust::for_each(CountingIterator(0), CountingIterator(0)+size2,
+      thrust::for_each(counter.begin(), counter.begin()+size2,
                 freeNodes(thrust::raw_pointer_cast(&*B.begin()),
                           thrust::raw_pointer_cast(&*D.begin()),
                           thrust::raw_pointer_cast(&*E.begin()),
-                          thrust::raw_pointer_cast(&*tmpNxt.begin()),
-                          thrust::raw_pointer_cast(&*tmpFree.begin()),
-                          thrust::raw_pointer_cast(&*nodeParent.begin()),
-                          thrust::raw_pointer_cast(&*nodeCount.begin()),
+                          thrust::raw_pointer_cast(&*tmpNxt_omp.begin()),
+                          thrust::raw_pointer_cast(&*tmpFree_omp.begin()),
+                          thrust::raw_pointer_cast(&*nodeParent_omp.begin()),
+                          thrust::raw_pointer_cast(&*nodeCount_omp.begin()),
                           size1, size2));
 
-      std::cout << "----tmpNxt "; thrust::copy(tmpNxt.begin(), tmpNxt.begin()+2, std::ostream_iterator<long long>(std::cout, " ")); std::cout << std::endl;
+//      thrust::for_each(counter.begin(), counter.begin()+cubes,
+//          freeNodesOld(thrust::raw_pointer_cast(&*tmpNxt_omp.begin()),
+//                       thrust::raw_pointer_cast(&*tmpFree_omp.begin()),
+//                       thrust::raw_pointer_cast(&*nodeParent_omp.begin()),
+//                       thrust::raw_pointer_cast(&*nodeCount_omp.begin()),
+//                       sizeP, cubesOri));
+
+      std::cout << "----tmpNxt_omp "; thrust::copy(tmpNxt_omp.begin(), tmpNxt_omp.begin()+2, std::ostream_iterator<long long>(std::cout, " ")); std::cout << std::endl;
 
       gettimeofday(&end, 0);
 
@@ -1347,11 +1419,32 @@ public:
       i++;
     }
 
+    struct timeval begin2, end2, diff2;
+
+    gettimeofday(&begin2, 0);
+		thrust::copy(leafParent_omp.begin(), leafParent_omp.end(), leafParent.begin());
+		thrust::copy(nodeParent_omp.begin(), nodeParent_omp.end(), nodeParent.begin());
+		thrust::copy(nodeI_omp.begin(), nodeI_omp.end(), nodeI.begin());
+		thrust::copy(nodeValue_omp.begin(), nodeValue_omp.end(), nodeValue.begin());
+		thrust::copy(nodeCount_omp.begin(), nodeCount_omp.end(), nodeCount.begin());
+		thrust::copy(nodeX_omp.begin(), nodeX_omp.end(), nodeX.begin());
+		thrust::copy(nodeY_omp.begin(), nodeY_omp.end(), nodeY.begin());
+		thrust::copy(nodeZ_omp.begin(), nodeZ_omp.end(), nodeZ.begin());
+		thrust::copy(nodeVX_omp.begin(), nodeVX_omp.end(), nodeVX.begin());
+		thrust::copy(nodeVY_omp.begin(), nodeVY_omp.end(), nodeVY.begin());
+		thrust::copy(nodeVZ_omp.begin(), nodeVZ_omp.end(), nodeVZ.begin());
+		std::cout << "----nodeVZ_omp "; thrust::copy(nodeVZ_omp.begin(), nodeVZ_omp.begin()+2, std::ostream_iterator<long long>(std::cout, " ")); std::cout << std::endl;
+		gettimeofday(&end2, 0);
+
+    timersub(&end2, &begin2, &diff2);
+    float seconds2 = diff2.tv_sec + 1.0E-6*diff2.tv_usec;
+    std::cout << "EndCopyTime : " << seconds2 << "s" << std::endl;
+
     cubes = cubesOri;
   }
 
   // combine free nodes lists of each cube at this iteration
-  struct combineFreeLists : public thrust::unary_function<int, void>
+  struct combineFreeLists : public thrust::unary_function<long long, void>
   {
     int  sizeP, n;
     unsigned long long numOfCubesOri;
@@ -1363,7 +1456,7 @@ public:
         tmpNxt(tmpNxt), tmpEnd(tmpEnd), tmpFree(tmpFree), sizeP(sizeP), n(n), numOfCubesOri(numOfCubesOri) {}
 
     __host__ __device__
-    void operator()(int i)
+    void operator()(long long i)
     {
       int cubeStart = sizeP*i;
       int cubeEnd   = (sizeP*(i+1)<=numOfCubesOri) ? sizeP*(i+1) : numOfCubesOri;
@@ -1411,7 +1504,7 @@ public:
         sizeP(sizeP), n(n), numOfCubesOri(numOfCubesOri) {}
 
     __host__ __device__
-    void operator()(int i)
+    void operator()(long long i)
     {
       unsigned long long cubeStart  = sizeP*i;
       unsigned long long cubeMiddle = ((sizeP*i+(sizeP/2))<numOfCubesOri) ? sizeP*i+(sizeP/2) : numOfCubesOri-1;
@@ -1459,7 +1552,7 @@ public:
   };
 
   //combine merge trees
-  struct combineMergeTrees : public thrust::unary_function<int, void>
+  struct combineMergeTrees : public thrust::unary_function<long long, void>
   {
     float  min_ll;
     int    sizeP;
@@ -1502,7 +1595,7 @@ public:
         min_ll(min_ll), sizeP(sizeP), numOfCubesOri(numOfCubesOri) {}
 
     __host__ __device__
-    void operator()(int i)
+    void operator()(long long i)
     {
       unsigned long long cubeStart = sizeP*i;
       unsigned long long cubeEnd   = (sizeP*(i+1)<numOfCubesOri) ? sizeP*(i+1) : numOfCubesOri;
@@ -1709,7 +1802,7 @@ public:
   };
 
   // jump node's parent pointers
-  struct jumpNodePointers : public thrust::unary_function<int, void>
+  struct jumpNodePointers : public thrust::unary_function<long long, void>
   {
     int   *nodeParent, *nodeCount;
     float *nodeValue;
@@ -1719,7 +1812,7 @@ public:
       nodeParent(nodeParent), nodeCount(nodeCount), nodeValue(nodeValue) {}
 
     __host__ __device__
-    void operator()(int i)
+    void operator()(long long i)
     {
       int tmp = nodeParent[i];
 
@@ -1734,7 +1827,7 @@ public:
   };
 
   // jump leaf's parent pointers
-  struct jumpLeafPointers : public thrust::unary_function<int, void>
+  struct jumpLeafPointers : public thrust::unary_function<long long, void>
   {
     int   *leafParent, *nodeParent;
     float *nodeValue;
@@ -1744,7 +1837,7 @@ public:
       leafParent(leafParent), nodeParent(nodeParent), nodeValue(nodeValue) {}
 
     __host__ __device__
-    void operator()(int i)
+    void operator()(long long i)
     {
       int tmp = leafParent[i];
 
@@ -1763,7 +1856,7 @@ public:
     isUsed(int *nodeCount) : nodeCount(nodeCount) {}
 
     __host__ __device__
-    bool operator()(const int i)
+    bool operator()(long long i)
     {
       return (nodeCount[i]!=-1);
     }
@@ -1779,7 +1872,7 @@ public:
     setCubeId(long long *A, long long *B, int sizeP) : A(A), B(B), sizeP(sizeP) {}
 
     __host__ __device__
-    void operator()(const int i)
+    void operator()(long long i)
     {
       B[i]  = (int)(A[i]/(2*sizeP));
       B[i] *= sizeP;
@@ -1787,7 +1880,7 @@ public:
   };
 
   // free nodes
-  struct freeNodes : public thrust::unary_function<int, void>
+  struct freeNodes : public thrust::unary_function<long long, void>
   {
     long long *A, *D, *E;
 
@@ -1805,7 +1898,7 @@ public:
         nodeParent(nodeParent), nodeCount(nodeCount), size1(size1), size2(size2) {}
 
     __host__ __device__
-    void operator()(int i)
+    void operator()(long long i)
     {
       int cubeStart = D[i];
 
@@ -1828,6 +1921,40 @@ public:
     }
   };
 
+  struct freeNodesOld : public thrust::unary_function<int, void>
+  {
+    int sizeP;
+    unsigned long long numOfCubesOri;
+
+    long long *tmpNxt, *tmpFree;
+
+    int *nodeParent;
+    int *nodeCount;
+
+    __host__ __device__
+    freeNodesOld(long long *tmpNxt, long long *tmpFree, int *nodeParent, int *nodeCount, int sizeP, unsigned long long numOfCubesOri) :
+        tmpNxt(tmpNxt), tmpFree(tmpFree), nodeParent(nodeParent), nodeCount(nodeCount), sizeP(sizeP), numOfCubesOri(numOfCubesOri) {}
+
+    __host__ __device__
+    void operator()(int i)
+    {
+      int cubeStart = sizeP*i;
+      int cubeEnd = (sizeP*(i+1)<=numOfCubesOri) ? sizeP*(i+1) : numOfCubesOri;
+
+      for(int k=2*cubeStart; k<2*cubeEnd; k++)
+      {
+        if(nodeCount[k]==-1) // set node as free
+        {
+          int tmpVal = tmpNxt[cubeStart];
+          tmpNxt[cubeStart] = k;
+          tmpFree[tmpNxt[cubeStart]] = tmpVal;
+
+          nodeCount[k] = 0;
+          nodeParent[k] = -1;
+        }
+      }
+    }
+  };
 
 
   //------- output results
