@@ -60,6 +60,7 @@ public:
   thrust::device_vector<float> nodeX, nodeY, nodeZ;               // positions of each node
   thrust::device_vector<float> nodeVX, nodeVY, nodeVZ;            // velocities of each node
 
+
   halo_merge(float min_linkLength, float max_linkLength, int k = 2, std::string filename="", std::string format=".cosmo", int n = 1, int np=1, float rL=-1) : halo(filename, format, n, np, rL)
   {
     if(numOfParticles!=0)
@@ -358,15 +359,24 @@ public:
     // find unique halo ids & one particle id which belongs to that halo
     haloIndexUnique.resize(numOfParticles);
     thrust::copy(haloIndex.begin(), haloIndex.end(), haloIndexUnique.begin());
+
     thrust::sequence(idOriginal.begin(), idOriginal.end());
-    thrust::stable_sort_by_key(haloIndexUnique.begin(), haloIndexUnique.begin()+numOfParticles, idOriginal.begin(), thrust::greater<int>());
+
+    thrust::device_vector<int> A(numOfParticles);
+    thrust::copy(leafI.begin(), leafI.end(), A.begin());
+
+    thrust::stable_sort_by_key(A.begin(), A.begin()+numOfParticles, thrust::make_zip_iterator(thrust::make_tuple(haloIndexUnique.begin(), idOriginal.begin())));
+    thrust::stable_sort_by_key(haloIndexUnique.begin(), haloIndexUnique.begin()+numOfParticles, idOriginal.begin());
 
     new_end = thrust::unique_by_key(haloIndexUnique.begin(), haloIndexUnique.begin()+numOfParticles, idOriginal.begin());
+    thrust::reverse(idOriginal.begin(), idOriginal.begin()+numOfHalos);
 
     numOfHalos = thrust::get<0>(new_end) - haloIndexUnique.begin();
+
     if(haloIndexUnique[numOfHalos-1]==-1) numOfHalos--;
 
-    thrust::reverse(idOriginal.begin(), idOriginal.begin()+numOfHalos);
+    haloIdOriginal.resize(numOfHalos);
+    thrust::copy(idOriginal.begin(), idOriginal.begin()+numOfHalos, haloIdOriginal.begin());
 
     // get the halo stats
     haloCount.resize(numOfHalos);

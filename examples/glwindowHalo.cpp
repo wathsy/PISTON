@@ -194,18 +194,19 @@ struct tuple2float3 : public thrust::unary_function<Float3, float3>
 struct setColor
 {
 	int    *haloIndexInU;
+	unsigned long long *haloIdOriginal;
 
   float4 *color;
   float  *R, *G, *B;
 
   __host__ __device__
-  setColor(int *haloIndexInU, float4 *color, float *R, float *G, float *B) :
-      haloIndexInU(haloIndexInU), color(color), R(R), G(G), B(B) {}
+  setColor(int *haloIndexInU, unsigned long long *haloIdOriginal, float4 *color, float *R, float *G, float *B) :
+      haloIndexInU(haloIndexInU), haloIdOriginal(haloIdOriginal), color(color), R(R), G(G), B(B) {}
 
   __host__ __device__
   void operator()(int i)
   {
-    int haloIndU = haloIndexInU[i];
+    int haloIndU = haloIdOriginal[haloIndexInU[i]];
 
     color[i] = make_float4(R[haloIndU],G[haloIndU],B[haloIndU],1);
   }
@@ -278,6 +279,7 @@ void GLWindowHalo::paintGL()
 
 		thrust::for_each(CountingIterator(0), CountingIterator(0)+haloFinder->numOfHaloParticles,
 		                 setColor(thrust::raw_pointer_cast(&*haloIndexInU.begin()),
+		                          thrust::raw_pointer_cast(&*haloFinder->haloIdOriginal.begin()),
 		                          thrust::raw_pointer_cast(&*colors.begin()),
 		                          thrust::raw_pointer_cast(&*haloFinder->haloColorsR.begin()),
 		                          thrust::raw_pointer_cast(&*haloFinder->haloColorsG.begin()),

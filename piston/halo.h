@@ -83,6 +83,7 @@ public:
 
 	// stores stats of each halos
   thrust::device_vector<int>    haloIndexUnique;            					 // unique halo indexes
+  thrust::device_vector<unsigned long long> haloIdOriginal;            // original id of the particle which determines the haloId
 	thrust::device_vector<int>    haloCount;														 // number of particles in each halo
   thrust::device_vector<float>  haloX, haloY, haloZ; 									 // positions for each halo
   thrust::device_vector<float>  haloVX, haloVY, haloVZ;    						 // velocities for each halo

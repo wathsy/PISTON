@@ -48,7 +48,6 @@ if (USE_CUDA)
 
 	SET(CUDA_NVCC_FLAGS "-Xcompiler -fopenmp -DTHRUST_HOST_SYSTEM=THRUST_HOST_SYSTEM_OMP")
 	cuda_add_executable(haloHybridGPU haloHybrid.cu OPTIONS ${CUDA_NVCC_FLAGS} "-DDATA_DIRECTORY=${DATA_DIR}")
-	#set_target_properties(haloHybridGPU PROPERTIES COMPILE_FLAGS "-Xcompiler -fopenmp -DTHRUST_HOST_SYSTEM=THRUST_HOST_SYSTEM_OMP -lgomp")
   target_link_libraries(haloHybridGPU pthread -lgomp)
 
   cuda_add_executable(mandelbrotGPU mandelbrot.cu)
