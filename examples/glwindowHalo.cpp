@@ -66,7 +66,7 @@ halo *haloFinder;
 // parameters needed for the halo_finder (look at halo_finder.h for definitions)
 float linkLength, max_linkLength, min_linkLength;
 int   particleSize, max_particleSize, min_particleSize;
-int   rL, np, n;
+int   rL, np, n, k;
 float xscal;
 
 bool  haloFound, haloShow;
@@ -124,12 +124,13 @@ bool GLWindowHalo::initialize(int argc, char *argv[])
   np = atof(argv[7]);
   rL = atof(argv[8]);
   n  = atof(argv[9]); //if you want a fraction of the file to load, use this.. 1/n
+  k  = atoi(argv[10]); // k-way merge for global step in dendogram based halo finder
 
 	// scale amount for particles
   if(rL==-1) xscal = 1;
   else       xscal = rL / (1.0*np);
 
-  haloFinder = new halo_merge(min_linkLength, max_linkLength, filename, format, n, np, rL);
+  haloFinder = new halo_merge(min_linkLength, max_linkLength, k, filename, format, n, np, rL);
 
   return true;
 }
@@ -193,6 +194,7 @@ struct tuple2float3 : public thrust::unary_function<Float3, float3>
 struct setColor
 {
 	int    *haloIndexInU;
+
   float4 *color;
   float  *R, *G, *B;
 
@@ -226,13 +228,13 @@ struct setHaloIdInU
     __host__ __device__
     void operator()(int i)
     {
-	for(int j=0; j<numOfHalos; j++)
-	{
-	    if(haloIndex_f[i] == haloIndexUnique[j])
-	    { haloIndexInU[i] = j;	return; }
-	}
+      for(int j=0; j<numOfHalos; j++)
+      {
+        if(haloIndex_f[i] == haloIndexUnique[j])
+        { haloIndexInU[i] = j;	return; }
+      }
 
-	haloIndexInU[i] = -1;
+      haloIndexInU[i] = -1;
     }
 };
 

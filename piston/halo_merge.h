@@ -113,6 +113,7 @@ public:
 
       std::cout << "-- globalStep done" << std::endl << std::endl;
 
+      setColors();
       getSizeOfMergeTree();
       writeMergeTreeToFile(filename);
 
@@ -169,7 +170,6 @@ public:
 
     getHaloDetails();   // get the unique halo ids & set numOfHalos
     getHaloParticles(); // get the halo particles & set numOfHaloParticles
-    setColors();        // set colors to halos
     writeHaloResults(); // write halo results
 
     std::cout << "Number of Particles   : " << numOfParticles << std::endl;
@@ -360,6 +360,7 @@ public:
     thrust::copy(haloIndex.begin(), haloIndex.end(), haloIndexUnique.begin());
     thrust::sequence(idOriginal.begin(), idOriginal.end());
     thrust::stable_sort_by_key(haloIndexUnique.begin(), haloIndexUnique.begin()+numOfParticles, idOriginal.begin(), thrust::greater<int>());
+
     new_end = thrust::unique_by_key(haloIndexUnique.begin(), haloIndexUnique.begin()+numOfParticles, idOriginal.begin());
 
     numOfHalos = thrust::get<0>(new_end) - haloIndexUnique.begin();
@@ -482,15 +483,18 @@ public:
   {
     unsigned long long *particleId;
 
+    int   *leafParentS;
     float *leafX, *leafY, *leafZ;
     float *inputX_f, *inputY_f, *inputZ_f;
 
     int *haloIndex, *haloIndex_f;
 
     __host__ __device__
-    getHaloParticlePositions(float *leafX, float *leafY, float *leafZ, int *haloIndex, unsigned long long *particleId,
+    getHaloParticlePositions(float *leafX, float *leafY, float *leafZ,
+      int *haloIndex, unsigned long long *particleId,
       float *inputX_f, float *inputY_f, float *inputZ_f, int *haloIndex_f) :
-      leafX(leafX), leafY(leafY), leafZ(leafZ), haloIndex(haloIndex), particleId(particleId),
+      leafX(leafX), leafY(leafY), leafZ(leafZ),
+      haloIndex(haloIndex), particleId(particleId),
       inputX_f(inputX_f), inputY_f(inputY_f), inputZ_f(inputZ_f), haloIndex_f(haloIndex_f) {}
 
     __host__ __device__

@@ -585,9 +585,9 @@ public:
 
     // for each halo, set unique colors
     u01 = thrust::uniform_real_distribution<float>(0.0f, 1.0f);
-    haloColorsR = random_vector(numOfHalos, maxrangeC, minrangeC);
-    haloColorsG = random_vector(numOfHalos, maxrangeC, minrangeC);
-    haloColorsB = random_vector(numOfHalos, maxrangeC, minrangeC);
+    haloColorsR = random_vector(numOfParticles, maxrangeC, minrangeC); //numOfHalos
+    haloColorsG = random_vector(numOfParticles, maxrangeC, minrangeC);
+    haloColorsB = random_vector(numOfParticles, maxrangeC, minrangeC);
   }
 
   // get start of vertices
