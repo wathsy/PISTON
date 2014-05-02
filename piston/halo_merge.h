@@ -369,9 +369,10 @@ public:
     thrust::stable_sort_by_key(haloIndexUnique.begin(), haloIndexUnique.begin()+numOfParticles, idOriginal.begin());
 
     new_end = thrust::unique_by_key(haloIndexUnique.begin(), haloIndexUnique.begin()+numOfParticles, idOriginal.begin());
-    thrust::reverse(idOriginal.begin(), idOriginal.begin()+numOfHalos);
-
     numOfHalos = thrust::get<0>(new_end) - haloIndexUnique.begin();
+
+    thrust::reverse(idOriginal.begin(), idOriginal.begin()+numOfHalos);
+    thrust::reverse(haloIndexUnique.begin(), haloIndexUnique.begin()+numOfHalos);
 
     if(haloIndexUnique[numOfHalos-1]==-1) numOfHalos--;
 

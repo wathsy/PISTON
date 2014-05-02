@@ -132,6 +132,9 @@ bool GLWindowHalo::initialize(int argc, char *argv[])
 
   haloFinder = new halo_merge(min_linkLength, max_linkLength, k, filename, format, n, np, rL);
 
+  setLinkLengthValue(QString::number(min_linkLength));
+  setParticleSizeValue(QString::number(min_particleSize));
+
   return true;
 }
 
@@ -249,7 +252,7 @@ void GLWindowHalo::paintGL()
 
   glMatrixMode(GL_PROJECTION);
   glLoadIdentity();
-  gluPerspective( cameraFOV, 1.0, 1.0, grid_size*4.0);
+  gluPerspective(cameraFOV, 1.0, 1.0, grid_size*4.0);
 
   // set view matrix for 3D scene
   glMatrixMode(GL_MODELVIEW);
@@ -324,12 +327,10 @@ void GLWindowHalo::resizeGL(int width, int height)
   glViewport(0, 0, width, height);
 }
 
-
 void GLWindowHalo::mousePressEvent(QMouseEvent *event)
 {
   lastPos = event->pos();
 }		
-
 
 void GLWindowHalo::mouseMoveEvent(QMouseEvent *event)
 {

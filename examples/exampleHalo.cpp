@@ -30,9 +30,9 @@ int main(int argc, char *argv[])
 		if (argc < 10)
 		{
 	    std::cout << "Usage:" << std::endl;
-	    std::cout << "haloGuiGPU filename format min_ll max_ll min_pz max_pz np rL n" << std::endl;
+	    std::cout << "haloGuiGPU filename format min_ll max_ll min_pz max_pz np rL n k" << std::endl;
 	    std::cout << "OR" << std::endl;
-	    std::cout << "haloGuiOMP filename format min_ll max_ll min_pz max_pz np rL n \n" << std::endl;
+	    std::cout << "haloGuiOMP filename format min_ll max_ll min_pz max_pz np rL n k\n" << std::endl;
 			return 1;
 		}
 
