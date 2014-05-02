@@ -1,11 +1,11 @@
 
 using namespace std;
 
-#include <piston/halo_naive.h>
-#include <piston/halo_kd.h>
-#include <piston/halo_vtk.h>
+//#include <piston/halo_naive.h>
+//#include <piston/halo_kd.h>
+//#include <piston/halo_vtk.h>
 #include <piston/halo_merge.h>
-#include <piston/halo_cc.h>
+//#include <piston/halo_cc.h>
 
 #include <sys/time.h>
 #include <stdio.h>
@@ -220,11 +220,11 @@ int main(int argc, char* argv[])
   (*halo)(linkLength, particleSize);
   thrust::device_vector<int> d = halo->getHalos();
 
-  std::cout << "Sparse connected components result" << std::endl;
-
-  halo = new halo_cc(filename, format, n, np, rL);
-  (*halo)(linkLength, particleSize);
-  thrust::device_vector<int> e = halo->getHalos();
+//  std::cout << "Sparse connected components result" << std::endl;
+//
+//  halo = new halo_cc(filename, format, n, np, rL);
+//  (*halo)(linkLength, particleSize);
+//  thrust::device_vector<int> e = halo->getHalos();
 
   //---------------------------- compare results
 
@@ -237,7 +237,7 @@ int main(int argc, char* argv[])
 //	compareResults(a, c, halo->numOfParticles, "Naive vs Kdtree");
 //	compareResults(b, c, halo->numOfParticles, "Vtk (thrust version) vs Kdtree");
 //	compareResults(c, d, halo->numOfParticles, "Kdtree vs Mergetree");
-	compareResults(d, e, halo->numOfParticles, "Mergetree vs Connected components");
+//	compareResults(d, e, halo->numOfParticles, "Mergetree vs Connected components");
 
 //  std::cout << "a "; thrust::copy(a.begin(), a.begin()+halo->numOfParticles, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;
 //  std::cout << "b "; thrust::copy(b.begin(), b.begin()+halo->numOfParticles, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl << std::endl;

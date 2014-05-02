@@ -1242,7 +1242,7 @@ public:
       }
       else if(cubes==1) break;
 
-      std::cout << "----tmpNxt "; thrust::copy(tmpNxt.begin(), tmpNxt.begin()+2, std::ostream_iterator<long long>(std::cout, " ")); std::cout << std::endl;
+      std::cout << "----tmpNxt "; thrust::copy(tmpNxt.begin(), tmpNxt.begin()+2, std::ostream_iterator<long long>(std::cout, " ")); std::cout << " ";
 
       gettimeofday(&mid1, 0);
 
@@ -1257,7 +1257,7 @@ public:
                          thrust::raw_pointer_cast(&*edgeSizeOfCubes.begin()),
                          sizeP, k, cubesOri));
 
-      std::cout << "----edgesSrc "; thrust::copy(edgesSrc.begin(), edgesSrc.begin()+2, std::ostream_iterator<long long>(std::cout, " ")); std::cout << std::endl;
+      std::cout << "----edgesSrc "; thrust::copy(edgesSrc.begin(), edgesSrc.begin()+2, std::ostream_iterator<long long>(std::cout, " ")); std::cout << " ";
 
       gettimeofday(&mid2, 0);
 
@@ -1336,24 +1336,24 @@ public:
 
       gettimeofday(&end, 0);
 
-      timersub(&mid1, &begin, &diff1);
-      float seconds1 = diff1.tv_sec + 1.0E-6*diff1.tv_usec;
-      std::cout << "Time elapsed " << seconds1 << "s combineFreeLists" << std::endl;
-      timersub(&mid2, &mid1, &diff2);
-      float seconds2 = diff2.tv_sec + 1.0E-6*diff2.tv_usec;
-      std::cout << "Time elapsed " << seconds2 << "s combineEdges" << std::endl;
-      timersub(&mid3, &mid2, &diff3);
-      float seconds3 = diff3.tv_sec + 1.0E-6*diff3.tv_usec;
-      std::cout << "Time elapsed " << seconds3 << "s combineMergeTrees" << std::endl;
-      timersub(&mid4, &mid3, &diff4);
-      float seconds4 = diff4.tv_sec + 1.0E-6*diff4.tv_usec;
-      std::cout << "Time elapsed " << seconds4 << "s jumpNodePointers" << std::endl;
-      timersub(&mid5, &mid4, &diff5);
-      float seconds5 = diff5.tv_sec + 1.0E-6*diff5.tv_usec;
-      std::cout << "Time elapsed " << seconds5 << "s jumpLeafPointers" << std::endl;
-      timersub(&end, &mid5, &diff6);
-      float seconds6 = diff6.tv_sec + 1.0E-6*diff6.tv_usec;
-      std::cout << "Time elapsed " << seconds6 << "s freeNodesNew" << std::endl;
+//      timersub(&mid1, &begin, &diff1);
+//      float seconds1 = diff1.tv_sec + 1.0E-6*diff1.tv_usec;
+//      std::cout << "Time elapsed " << seconds1 << "s combineFreeLists" << std::endl;
+//      timersub(&mid2, &mid1, &diff2);
+//      float seconds2 = diff2.tv_sec + 1.0E-6*diff2.tv_usec;
+//      std::cout << "Time elapsed " << seconds2 << "s combineEdges" << std::endl;
+//      timersub(&mid3, &mid2, &diff3);
+//      float seconds3 = diff3.tv_sec + 1.0E-6*diff3.tv_usec;
+//      std::cout << "Time elapsed " << seconds3 << "s combineMergeTrees" << std::endl;
+//      timersub(&mid4, &mid3, &diff4);
+//      float seconds4 = diff4.tv_sec + 1.0E-6*diff4.tv_usec;
+//      std::cout << "Time elapsed " << seconds4 << "s jumpNodePointers" << std::endl;
+//      timersub(&mid5, &mid4, &diff5);
+//      float seconds5 = diff5.tv_sec + 1.0E-6*diff5.tv_usec;
+//      std::cout << "Time elapsed " << seconds5 << "s jumpLeafPointers" << std::endl;
+//      timersub(&end, &mid5, &diff6);
+//      float seconds6 = diff6.tv_sec + 1.0E-6*diff6.tv_usec;
+//      std::cout << "Time elapsed " << seconds6 << "s freeNodesNew" << std::endl;
 
       timersub(&end, &begin, &diff);
       float seconds = diff.tv_sec + 1.0E-6*diff.tv_usec;
