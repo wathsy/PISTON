@@ -315,6 +315,8 @@ public:
                   thrust::raw_pointer_cast(&*nodeParent.begin()),
                   thrust::raw_pointer_cast(&*haloIndex.begin()),
                   linkLength, particleSize));
+
+    std::cout << "----haloIndex "; thrust::copy(haloIndex.begin(), haloIndex.begin()+2, std::ostream_iterator<int>(std::cout, " ")); std::cout << std::endl;
   }
 
   // for a given node set its halo id, for pa 0 6 4 rticles in filtered halos set id to -1
@@ -1074,7 +1076,7 @@ public:
                   {
                     float3 p_k = make_float3(leafX[k], leafY[k], leafZ[k]);
 
-                    double dist = ((p_j.x-p_k.x)*(p_j.x-p_k.x) + (p_j.y-p_k.y)*(p_j.y-p_k.y) + (p_j.z-p_k.z)*(p_j.z-p_k.z));
+                    float dist = ((p_j.x-p_k.x)*(p_j.x-p_k.x) + (p_j.y-p_k.y)*(p_j.y-p_k.y) + (p_j.z-p_k.z)*(p_j.z-p_k.z));
                     if(dist < eWeight)
                     {
                       eSrc = j; eDes = k; eWeight = dist;
@@ -1089,7 +1091,7 @@ public:
                 {
                   edgesSrc[start + size] = eSrc;
                   edgesDes[start + size] = eDes;
-                  edgesWeight[start + size] = std::sqrt(eWeight);
+                  edgesWeight[start + size] = floorf((float) std::sqrt(eWeight) * 100000) / 100000; //(float) std::sqrt(eWeight);
                   size++;
                 }
               }
@@ -1099,6 +1101,10 @@ public:
 
         loopEnd:
         edgeSizeOfCubes[l] = size;
+
+//        float rounded_down = floorf(val * 100) / 100;   /* Result: 37.77 */
+//        float nearest = floorf(val * 100 + 0.5) / 100;  /* Result: 37.78 */
+//        float rounded_up = ceilf(val * 100) / 100;      /* Result: 37.78 */
       }
     }
   };
