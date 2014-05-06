@@ -1106,7 +1106,7 @@ public:
                 {
                   edgesSrc[start + size] = eSrc;
                   edgesDes[start + size] = eDes;
-                  edgesWeight[start + size] = floorf((float) std::sqrt(eWeight) * 100000) / 100000; //(float) std::sqrt(eWeight);
+                  edgesWeight[start + size] = floorf((float) std::sqrt(eWeight) * 1000) / 1000; //(float) std::sqrt(eWeight);
                   size++;
                 }
               }
